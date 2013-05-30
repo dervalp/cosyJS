@@ -6,7 +6,7 @@ var express = require('express'),
     http = require('http');
 
 /**
- * Configuration's module
+ * Configuration's module, should come from database
  */
 var conf = require("./conf"),
     testingData = require("./data");
@@ -44,7 +44,9 @@ staticServer.configure(app);
 
 _c.setEngine(tmplEngine);
 
+/* should come from database or internal memory */
 var components = ["text", "image", "menu", "button",  "collapse"];
+
 
 componentBuilder.build(components, _c, function(_c) {
 
