@@ -1,0 +1,27 @@
+body {
+    background:#FBFBFB;
+}
+.top-bar {
+    background-color: #EDEDED;
+}
+h1, h2 {
+    font-family: 'Questrial', sans-serif;
+}
+.top-bar .name h1.logo a {
+    color:#ee3f87;
+}
+.top-bar-section > ul > .divider {
+    border-right: solid 1px #f2f2f2;
+    border-left: solid 1px #fff;
+}
+.top-bar-section ul {
+    background:#F2F2F2;
+}
+.top-bar-section li a:not(.button) {
+    background-color:rgba(255, 255, 255, 0.0);
+    color:#808080;
+    font-weight:normal;
+}
+#newsletter {
+    margin:20px 0;
+}
