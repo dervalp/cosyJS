@@ -47,7 +47,7 @@ _c.setEngine(tmplEngine);
 /* should come from database or internal memory */
 var components = ["text", "image", "menu", "button",  "collapse"];
 
-
+/*should be move to other module*/
 componentBuilder.build(components, _c, function(_c) {
 
     applicationServer.configure(app, _c, testingData);
