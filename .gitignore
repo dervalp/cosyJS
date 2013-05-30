@@ -1,4 +1,5 @@
 lib-cov
+donotupdate
 node_modules
 *.seed
 *.log
