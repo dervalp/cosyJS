@@ -1,4 +1,4 @@
-pillow
+cosyJS
 ======
 
 Full stack UI component library
