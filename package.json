@@ -1,6 +1,6 @@
 {
   "name": "cosy JS",
-  "description": "module to manager your static resources, full-stack UI component library, layout generator",
+  "description": "module to manage your static resources, full-stack UI component library, layout generator",
   "version": "0.0.1",
   "author": "Pierre Derval <dervalp@gmail.com>",
   "dependencies": {
