@@ -33,10 +33,9 @@ Right now Cosy required an express instance in order to work, here is the code t
 
 ```javascript
   var express = require('express'),
-	path = require('path'),
-    http = require('http'),
-	app = express(),
-	cosy = require('./index')(app);
+      http = require('http'),
+	  app = express(),
+	  cosy = require('./index')(app);
 
   cosy.start(function(){
   	http.createServer(app).listen(app.get('port'), function() {
