@@ -78,3 +78,107 @@ Here is a template for the "basicComponent" above:
   <button class="someClass">Do Something</button>
 </div>
 ```
+##The layout
+
+When you have some component, you now need to add them to a page. But a page needs a layout.
+The layout is mainly used to define some custom stylesheets, some script (GA),...
+
+Layout uses the JADE notation.
+
+Here is a really simple layout:
+
+```jade
+doctype 5
+  html
+	head
+	    title
+	    link(href="http://twitter.github.io/bootstrap/assets/css/bootstrap.css", rel="stylesheet")
+	    link(href="/stylesheets/style.css", rel="stylesheet")
+	  body
+	    div.container
+	        |<%=content%>
+	    script
+	        window.__c_conf = <%= conf %>;
+	    script(src="http://code.jquery.com/jquery-2.0.0.js")
+	    script(src="/javascripts/c.js")
+```
+
+The required part of this layout is the 3 last lines.
+
+NOTE: Please note, we are trying to improve this part to use our other module called "Hygge" (a script file loader). More information will come.
+
+##The Page Structure
+
+You page will also need a page structure, this page structure could be reuse by multiple pages.
+
+Here is an example of a Page Structure:
+
+```javascript
+ var basicStructure = 
+ {  
+  name:     "root",
+  order: 0,
+  columns:  [
+              {
+                name:     "header",
+                columns:  [
+                            { name: "logo", size:"4", parent: "header", order: 0 },
+                            { name: "menu", size:"8", parent: "header", order: 1 },
+                          ],
+                parent: "root",
+                order: 0
+              },
+              {
+                name:     "content",
+                columns:  [
+                            { name: "main", size:"12", parent: "content", order: 0 }                        
+                          ],
+                parent: "root",
+                order: 1
+              },
+              {
+                name:     "footer",
+                columns:  [
+                            { name: "footerContent", size:"12", parent: "footer", order: 0 }                            
+                          ],
+                parent: "root",
+                order: 2
+              }
+  ]
+};
+```
+
+This page structure defines the placeholder you want in our page. This will allows you to place your component in the page.
+
+You could use cosy without a grid CSS but cosy assumes you are, and let you define the size of the Column your want.
+
+##The Page
+
+The page contains all the component information and where the component are located for a specific route.
+
+Here is an example:
+
+```javascript
+  {
+    name: "index",
+    layout: "layout",    
+    route: "/",
+    components: [
+      { type: "text", category: "h1", id: "Logo", order:1 , dynamic: true, placeholder: "logo", data: { text: "Cosy Js" } },
+      { type: "image", source: "https://redappleapartments.files.wordpress.com/2012/05/copenhagen1.jpg", id: "image", order:4, placeholder: "main" },
+    ]
+  }
+```
+
+As you can see, the page is defined by a name (not really used), a route (the URL in your adress bar), the layout (he needs to use) and a list of components. Each component needs to have the name of the placeholder you want to insert itself and a data object. This data will be used by the component.
+
+
+##Put it all together
+
+What cosyJS does under the hood is to assembly all these static definitions to produce a dynamic website.
+
+##Dealing with Data
+
+As you can see, there is nothing talking about Data, cosy lets you defined how you where and how you want to fetch you Data. The ID is to extend the APP object and to create a REST API using express. Hence, in your component, you will be able to fetch the data you want.
+
+
