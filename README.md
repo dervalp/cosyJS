@@ -43,4 +43,38 @@ Right now Cosy required an express instance in order to work, here is the code t
     });
   });
 ```
+##The Component
 
+By using node.js we are able to run the same code client and server side and cosy tries to take this to its advantage and allows you to share lots of code client and server side.
+
+A component needs 2 things in order to work, the definition and the template.
+
+**The definition**
+
+It is there where you will put the logic of your component. This component is a wrapper for a Backbone.Model anb a Backbone.View. So you can use all the backbone syntax in it.
+
+A basic component definion:
+
+```javascript
+_c.component({
+    name: "basicComponent",
+    events: {
+    	"click .someClass": "doSomething"
+    },
+    doSomething: function() {
+    	alert("hello world")
+	}
+});
+```
+
+**The template**
+
+The template uses handlbar (client/server) syntax to produce the HTML.
+
+Here is a template for the "basicComponent" above:
+
+```html
+<div>
+  <button class="someClass">Do Something</button>
+</div>
+```
