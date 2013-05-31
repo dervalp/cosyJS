@@ -45,7 +45,7 @@ Right now Cosy required an express instance in order to work, here is the code t
 ```
 ##The Component
 
-By using node.js we are able to run the same code client and server side and cosy tries to take this to its advantage and allows you to share lots of code client and server side.
+By using node.js we are able to run the same code client and server side and cosy tries to take this to its advantage and allows you to share lots of code between them.
 
 A component needs 2 things in order to work, the definition and the template.
 
@@ -80,7 +80,7 @@ Here is a template for the "basicComponent" above:
 ```
 ##The layout
 
-When you have some component, you now need to add them to a page. But a page needs a layout.
+When you have some components, you now need to add them to a page. But a page needs a layout.
 The layout is mainly used to define some custom stylesheets, some script (GA),...
 
 Layout uses the JADE notation.
@@ -148,9 +148,9 @@ Here is an example of a Page Structure:
 };
 ```
 
-This page structure defines the placeholder you want in our page. This will allows you to place your component in the page.
+The page structure defines the placeholders you want to add in your page.
 
-You could use cosy without a grid CSS but cosy assumes you are, and let you define the size of the Column your want.
+You could use cosy without a CSS grid but cosy assumes you are using one, and let you define the size of the Column you want.
 
 ##The Page
 
@@ -170,7 +170,7 @@ Here is an example:
   }
 ```
 
-As you can see, the page is defined by a name (not really used), a route (the URL in your adress bar), the layout (he needs to use) and a list of components. Each component needs to have the name of the placeholder you want to insert itself and a data object. This data will be used by the component.
+As you can see, the page is defined by a name (title of the Page), a route (the URL in your adress bar), the layout (he needs to use) and a list of components. Each component needs to have the name of the placeholder you want to insert itself and a data object. This data will be used by the component.
 
 
 ##Put it all together
@@ -179,6 +179,10 @@ What cosyJS does under the hood is to assembly all these static definitions to p
 
 ##Dealing with Data
 
-As you can see, there is nothing talking about Data, cosy lets you defined how you where and how you want to fetch you Data. The ID is to extend the APP object and to create a REST API using express. Hence, in your component, you will be able to fetch the data you want.
+As you can see, there is nothing related to Data communcation, cosy lets you defined how and where you want to fetch your Data. The idea is to extend the APP object and to create a REST API using express. Hence, in your component, you will be able to fetch the data you want.
 
+TODO: We will try to find an easy way for you to work "out of the box" with a REST Api.
 
+##Conclusion
+
+As you can see, this is an ambitious project and currently you are just able to produced really basic website with it but we are working hard to enhance this and you are welcome to contribute to the project.
