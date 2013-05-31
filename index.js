@@ -1,1 +1,1 @@
-module.exports = require('./cosy');
+module.exports = require('./lib/cosy');
