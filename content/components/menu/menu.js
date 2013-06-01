@@ -1,5 +1,5 @@
 _c.component({
-    name: "menu",
+    type: "menu",
     attributes: [
 		{ source: "" }
     ]

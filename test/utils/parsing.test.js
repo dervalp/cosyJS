@@ -21,4 +21,10 @@ describe('Given a Parsing Utils', function() {
 
         type.should.eql("test");
     });
+    it('extractType should work', function() {
+        var test = '<div class="fefefe">bla allala <p>wefwefwef</p></div>',
+            type = parsingHelper.extractType(test);
+
+        type.should.eql("");
+    });
 });

@@ -1,5 +1,5 @@
 _c.component({
-    name: "text",
+    type: "text",
     events: {
     	"click": "test"
     },

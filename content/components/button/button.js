@@ -1,5 +1,5 @@
 _c.component({
-    name: "button",
+    type: "button",
     attributes: [
 		{ text: "Click" }
     ]

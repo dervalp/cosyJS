@@ -1,5 +1,5 @@
 _c.component({
-    name: "image",
+    type: "image",
     attributes: [
 		{ source: "" }
     ]
