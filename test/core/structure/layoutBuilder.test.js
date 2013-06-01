@@ -1,4 +1,4 @@
-var layoutBuilder = require("../../core/layoutBuilder"),
+var layoutBuilder = require("../../../lib/core/structure/layoutBuilder"),
 	should = require("should");
 
 describe('Given a layoutBuilder', function() {

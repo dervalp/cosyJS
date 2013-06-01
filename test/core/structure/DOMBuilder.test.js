@@ -1,4 +1,4 @@
-var DOMBuilder = require("../../../core/structure/DOMBuilder"),
+var DOMBuilder = require("../../../lib/core/structure/DOMBuilder"),
     should = require("should");
 
 describe('Given a DOMBuilder', function() {

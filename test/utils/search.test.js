@@ -1,4 +1,4 @@
-var search = require("../../utils/search"),
+var search = require("../../lib/utils/search"),
     should = require("should");
 
 var basicStructure = 

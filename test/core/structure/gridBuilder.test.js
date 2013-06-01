@@ -1,4 +1,4 @@
-var gridBuilder = require("../../../core/structure/gridBuilder"),
+var gridBuilder = require("../../../lib/core/structure/gridBuilder"),
     should = require("should");
 
 describe('Given a gridBuilder', function() {
