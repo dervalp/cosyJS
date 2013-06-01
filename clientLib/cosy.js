@@ -164,7 +164,7 @@ var createModule = function(name) {
 };
 
 var createComponent = function(name, model, view, collection) {
-    if(_c.components[name]) { throw "component already existing"; }
+    if(_c.components[name]) { throw name + " component already existing"; }
 
     _c.components[name] = {
         model: model,
@@ -180,7 +180,7 @@ _c.config = root.__c_conf || undefined;
 var emtpy = function() {};
 _c.component = function(obj) {
 
-    var componentName = obj.name,
+    var componentName = obj.type,
         attrs = obj.attributes,
         based = ["attributes", "name", "base", "plugin", "initialize", "listenTo", "extendModel"],
         functions = _.omit(obj, based),
@@ -320,11 +320,11 @@ var buildInitialValues = function(id, config) {
 var parseApp = function(controls) {
   var ids = _.keys(controls);
   _.each(ids, function(id) {
-    exposedComponet(controls[id], buildInitialValues(id, _c.config));
+    exposedComponent(controls[id], buildInitialValues(id, _c.config));
   });
 };
 
-var exposedComponet = function(control, initValues) {
+var exposedComponent = function(control, initValues) {
   var component = _c.components[control.type],
       model = new component.model(initValues),
       view = new component.view({ model: model, el: "." + control.id });

@@ -22,7 +22,7 @@ describe('Given a componetBuilder', function() {
         componentBuilder("/somePath").build.should.exists;
     });
     describe('with a existing Path', function() {
-        var compBuilder = componentBuilder("content/components");
+        var compBuilder = componentBuilder("content/components/");
         it('load', function(done) {
             compBuilder.build(_c, function (_c) {
                 _c.comp.length.should.eql(5);
