@@ -1,5 +1,5 @@
 var should = require("should"),
-	  treeBuilder = require("../../../core/structure/treeBuilder");
+	  treeBuilder = require("../../../lib/core/structure/treeBuilder");
 
 var complexStructure = 
 {  

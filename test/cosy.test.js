@@ -21,7 +21,7 @@ describe('Given Cosy', function() {
             cosyApp.start.should.exists;
         });
         it('should start server when calling start', function(done) {          
-            cosyApp.start(function(){
+            cosyApp.start(function() {
                 done();
             });
         });

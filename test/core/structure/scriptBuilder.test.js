@@ -1,5 +1,5 @@
 var should = require("should"),
-    scriptBuilder = require("../../../core/structure/scriptBuilder");
+    scriptBuilder = require("../../../lib/core/structure/scriptBuilder")("content/components/");
 
 describe('Given a ScriptBuilder', function() {
     it('build method should be defined', function() {

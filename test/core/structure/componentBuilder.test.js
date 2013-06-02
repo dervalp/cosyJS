@@ -24,8 +24,9 @@ describe('Given a componetBuilder', function() {
     describe('with a existing Path', function() {
         var compBuilder = componentBuilder("content/components/");
         it('load', function(done) {
-            compBuilder.build(_c, function (_c) {
+            compBuilder.build(_c, function (_c, configuration) {
                 _c.comp.length.should.eql(5);
+                configuration.length.should.eql(5);
                 done();
             });
         });
