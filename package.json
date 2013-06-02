@@ -1,17 +1,17 @@
 {
   "name": "cosy",
   "description": "module to manage your static resources, full-stack UI component library, layout generator",
-  "version": "0.0.1a",
+  "version": "0.0.2",
   "author": "Pierre Derval <dervalp@gmail.com>",
   "dependencies": {
-    "express": "3.0.3",
     "jade": "*",
     "async": "*",
     "backbone": "*",
     "browserify": "*",
     "handlebars": "*",
     "underscore": "*",
-    "less": "*"
+    "less": "*",
+    "rivets": "*"
   },
   "devDependencies": {
     "grunt": "*",

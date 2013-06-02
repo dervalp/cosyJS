@@ -1,0 +1,449 @@
+#!/usr/bin/env node
+
+/**
+ * Module dependencies.
+ */
+
+//var express = require('../');
+//var wrench = require('wrench');
+var exec = require('child_process').exec;
+var program = require('commander');
+var fs = require('fs');
+
+// CLI
+
+program
+  .version('0.0.1')
+  //.option('-s, --sessions', 'add session support')
+  //.option('-j, --jade', 'add jade support (defaults to ejs)')
+  .parse(process.argv); //process is a node.js global
+
+
+// Path
+
+var path = program.args.shift() || '.';
+
+
+// Stylesheet engine
+
+//program.css = program.stylus ? 'stylus' : null;
+
+/**
+ * Jade layout template.
+ */
+
+var jadeLayout = [
+    '!!!'
+  , 'html'
+  , '  head'
+  , '    title= title'
+  , '    link(rel=\'stylesheet\', href=\'/stylesheets/style.css\')'
+  , '  body!= body'
+].join('\n');
+
+/**
+ * Jade index template.
+ */
+
+var jadeIndex = [
+    'h1= title'
+  , 'p Welcome to #{title}'
+].join('\n');
+
+/**
+ * EJS layout template.
+ */
+
+var ejsLayout = [
+    '<!DOCTYPE html>'
+  , '<html>'
+  , '  <head>'
+  , '    <title><%= title %></title>'
+  , '    <link rel=\'stylesheet\' href=\'/stylesheets/style.css\' />'
+  , '  </head>'
+  , '  <body>'
+  , '    <%- body %>'
+  , '  </body>'
+  , '</html>'
+].join('\n');
+
+/**
+ * EJS index template.
+ */
+
+var ejsIndex = [
+    '<h1><%= title %></h1>'
+  , '<p>Welcome to <%= title %></p>'
+  ].join('\n');
+
+/**
+ * Default css template.
+ */
+
+var css = [
+    'body {'
+  , '  padding: 50px;'
+  , '  font: 14px "Lucida Grande", Helvetica, Arial, sans-serif;'
+  , '}'
+  , ''
+  , 'a {'
+  , '  color: #00B7FF;'
+  , '}'
+].join('\n');
+
+// /**
+//  * Default less template.
+//  */
+// 
+// var less = [
+//     'body {'
+//   , '  padding: 50px;'
+//   , '  font: 14px "Lucida Grande", Helvetica, Arial, sans-serif;'
+//   , '}'
+//   , ''
+//   , 'a {'
+//   , '  color: #00B7FF;'
+//   , '}'
+// ].join('\n');
+
+// /**
+//  * Default sass template.
+//  */
+// 
+// var sass = [
+//     'body'
+//   , '  :padding 50px'
+//   , '  :font 14px "Lucida Grande", Helvetica, Arial, sans-serif'
+//   , 'a'
+//   , '  :color #00B7FF'
+// ].join('\n');
+
+
+
+/**
+ * Express App template (.js)
+ */
+
+var express_app_js = [
+    ''
+  , '/**'
+  , ' * Module dependencies.'
+  , ' */'
+  , ''
+  , 'var express = require(\'express\');'
+  , ''
+  , 'var app = module.exports = express.createServer();'
+  , ''
+  , '// Configuration'
+  , ''
+  , 'app.configure(function(){'
+  , '  app.set(\'views\', __dirname + \'/views\');'
+  , '  app.set(\'view engine\', \'{{template}}\');'
+  , '  app.use(express.logger(\'dev\'));'
+  , '  app.use(express.bodyParser());'
+  , '  app.use(express.methodOverride());{sess}{css}'
+  , '  app.use(app.router);'
+  , '  app.use(express.static(__dirname + \'/public\'));'
+  , '});'
+  , ''
+  , 'app.configure(\'development\', function(){'
+  , '  app.use(express.errorHandler({ dumpExceptions: true, showStack: true })); '
+  , '});'
+  , ''
+  , 'app.configure(\'production\', function(){'
+  , '  app.use(express.errorHandler()); '
+  , '});'
+  , ''
+  , '// Routes'
+  , ''
+  , 'app.get(\'/\', function(req, res){'
+  , '  res.render(\'index\', {'
+  , '    title: \'Express\''
+  , '  });'
+  , '});'
+  , ''
+  , 'var port = process.env.PORT || 3300;'
+  , 'app.listen(port);'
+  , 'console.log("Express server listening on port %d in %s mode", app.address().port, app.settings.env);'
+  , ''
+].join('\n');
+
+/**
+ * Express App template (.coffee)
+ */
+
+var express_app_coffee = [
+    ''
+  , '###'
+  , '  Module dependencies.'
+  , '###'
+  , ''
+  , 'coffee = require(\'coffee-script\')'
+  , 'express = require(\'express\')'
+  , ''
+  , 'app = module.exports = express.createServer()'
+  , ''
+  , '# Configuration'
+  , ''
+  , 'app.configure( () ->'
+  , '  app.set(\'views\', __dirname + \'/views\')'
+  , '  app.set(\'view engine\', \'{{template}}\')'
+  , '  app.use(express.logger(\'dev\'))'
+  , '  app.use(express.bodyParser())'
+  , '  app.use(express.methodOverride()){sess}{css}'
+  , '  app.use(app.router)'
+  , '  app.use(express.static(__dirname + \'/public\'))'
+  , ')'
+  , ''
+  , 'app.configure(\'development\', () ->'
+  , '  app.use(express.errorHandler({ dumpExceptions: true, showStack: true })) '
+  , ')'
+  , ''
+  , 'app.configure(\'production\', () ->'
+  , '  app.use(express.errorHandler()) '
+  , ')'
+  , ''
+  , '# Routes'
+  , ''
+  , 'app.get(\'/\', (req, res) ->'
+  , '  res.render(\'index\', {'
+  , '    title: \'Express\''
+  , '  })'
+  , ')'
+  , ''
+  , 'port = process.env.PORT ? 3300'
+  , 'app.listen(port)'
+  , 'console.log("Express server listening on port %d in %s mode", app.address().port, app.settings.env)'
+  , ''
+].join('\n');
+
+
+//console.log("Have you chosen the language: " + selected);
+
+// Check for --coffee option
+
+// Generate application
+
+function createApplication(path) {
+  //console.log("And now the Path is: " + path);
+  emptyDirectory(path, function(empty){
+    if (empty) {
+      process.stdin.destroy();
+      createApplicationAt(path);
+    } else {
+      program.confirm('destination is not empty, continue? ', function(ok){
+        if (ok) {
+          process.stdin.destroy();
+          createApplicationAt(path);
+        } else {
+          abort('aborting');
+        }
+      });
+    }
+  });
+}
+
+/**
+ * Create application at the given directory `path`.
+ *
+ * @param {String} path
+ */
+
+function createApplicationAt(path) {
+  mkdir(path, function(){
+    mkdir(path + '/public/javascripts');
+    mkdir(path + '/public/images');
+    mkdir(path + '/public/stylesheets', function(){
+      switch (program.css) {
+        // case 'stylus':
+        //   write(path + '/public/stylesheets/style.styl', stylus);
+        //   break;
+        // case 'less':
+        //   write(path + '/public/stylesheets/style.less', less);
+        //   break;
+        // case 'sass':
+        //   write(path + '/public/stylesheets/style.sass', sass);
+        //   break;
+        default:
+          write(path + '/public/stylesheets/style.css', css);
+          break;
+      }
+    });
+
+    mkdir(path + '/views', function(){
+      switch (program.template) {
+        case 'ejs':
+          write(path + '/views/layout.ejs', ejsLayout);
+          write(path + '/views/index.ejs', ejsIndex);
+          break;
+        case 'jade':
+          write(path + '/views/layout.jade', jadeLayout);
+          write(path + '/views/index.jade', jadeIndex);
+          break;
+      }
+    });
+
+    // CSS Engine support
+    switch (program.css) {
+      case 'sass':
+      case 'less':
+        app = app.replace('{css}', '\n  app.use(express.compiler({ src: __dirname + \'/public\', enable: [\'' + cssEngine + '\'] }));');
+        break;
+      case 'stylus':
+        app = app.replace('{css}', '\n  app.use(require(\'stylus\').middleware({ src: __dirname + \'/public\' }));');
+        break;
+      default:
+        app = app.replace('{css}', '');
+    }
+
+    // Session support
+    var semi_colon = program.language == "js" ? ";" : "";
+    app = app.replace('{sess}', program.sessions === true
+      ? '\n  app.use(express.cookieParser())' + semi_colon +'\n  app.use(express.session({ secret: \'your secret goes here\' }))' + semi_colon
+      : '');
+
+    // Template support
+    app = app.replace('{{template}}', program.template);
+
+    // package.json
+    var json = '{\n';
+    json += '    "name": "application-name"\n';
+    json += '  , "version": "0.0.1"\n';
+    json += '  , "private": true\n';
+    json += '  , "dependencies": {\n';
+    json += '      "express": ">= 0.0.1"\n';
+    if (program.css) json += '    , "' + program.css + '": ">= 0.0.1"\n';
+    if (program.template) json += '    , "' + program.template + '": ">= 0.0.1"\n';
+    if (program.language == "coffee") json += '    , "coffee-script": ">= 0.0.1"\n';
+    json += '  }\n';
+    json += '}';
+
+    //app.js or app.coffee
+    
+    var extension = program.language == "js" ? '.js' : '.coffee';
+    write(path + '/package.json', json);
+    write(path + '/app' + extension, app);
+    
+    //.gitignore
+    var gitignore = 'node_modules';
+    write(path + '/.gitignore', gitignore);
+    
+    //Procfile
+    if (program.language == "js") {
+       var procfile = 'web: node app.js';
+    } else {
+       var procfile = 'web: coffee app.coffee';
+    }
+    write(path + '/Procfile', procfile);
+    
+  });
+
+}
+
+/**
+ * Check if the given directory `path` is empty.
+ *
+ * @param {String} path
+ * @param {Function} fn
+ */
+
+function emptyDirectory(path, fn) {
+  fs.readdir(path, function(err, files){
+    if (err && 'ENOENT' != err.code) throw err;
+    fn(!files || !files.length); //True if there are no files returned from readdir
+  });
+}
+
+/**
+ * echo str > path.
+ *
+ * @param {String} path
+ * @param {String} str
+ */
+
+function write(path, str) {
+  fs.writeFile(path, str);
+  console.log('   \x1b[36mcreate\x1b[0m : ' + path);
+}
+
+/**
+ * Mkdir -p.
+ *
+ * @param {String} path
+ * @param {Function} fn
+ */
+
+function mkdir(path, fn) {
+  exec('mkdir -p ' + path, function(err){
+    if (err) throw err;
+    console.log('   \x1b[36mcreate\x1b[0m : ' + path);
+    fn && fn();
+  });
+}
+
+/**
+ * Exit with the given `str`.
+ *
+ * @param {String} str
+ */
+
+function abort(str) {
+  console.error(str);
+  process.exit(1);
+}
+
+//PROMPT THE USER FOR JS OR COFFEE
+
+function chooseTemplate () {
+  // Template engine
+  var template_list = ['ejs', 'jade'];
+  console.log("Choose your templating language:");
+  program.choose(template_list, function(i) {
+
+    program.template = template_list[i];
+
+    promptSessions();
+  }); 
+}
+
+function promptSessions () {
+  program.prompt('Do you want to use express sessions? (y|n): ', function(resp){
+    console.log('hi %s', resp);
+    if (resp == "n") {
+      program.sessions = false;
+    } else {
+      program.sessions = true;
+    }
+    
+    createApplication(path);
+    showNextSteps();
+    
+  });
+}
+
+function showNextSteps () {
+  console.log("\nNEXT STEPS:\n  a) cd " + path + "\n  b) npm install");
+  var node_or_coffee = program.language === "js" ? "node" : "coffee";
+  console.log("  c) " + node_or_coffee + " app." + program.language + "\n");
+}
+
+var language_list = ['js', 'coffee'];
+
+console.log("Choose your language:");
+program.choose(language_list, function(i){
+  //console.log('you chose %d "%s"', i, list[i]);
+  program.language = i === 0 ? "js" : "coffee";
+  //console.log("The current Path is: " + path);
+  app = program.language === "js" ? express_app_js : express_app_coffee;
+  //createApplication(path);
+  //console.log("language_list Would createApplication(path) now");
+  
+  
+  chooseTemplate();
+  
+});
+
+
+
+
+
