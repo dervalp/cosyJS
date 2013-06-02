@@ -17,7 +17,7 @@ cosyJS has also some nice features out of the box like:
 
 ## Demo
 
-You can find an implementation of a the well know [toto app](https://github.com/dervalp/cosyJS-todo)
+You can find an implementation of a the well know [Todo app](https://github.com/dervalp/cosyJS-todo)
 
 ## Try it and give feedback
 
