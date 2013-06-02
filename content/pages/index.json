@@ -1,0 +1,16 @@
+{
+    "layout": "layout",
+    "name": "index",
+    "route": "/",
+    "components": [
+      { 
+        "type": "text",
+        "category": "h1",
+        "id": "Logo",
+        "order":1 ,
+        "dynamic": true,
+        "placeholder":"logo",
+        "data": { "text": "Cosy Js" }
+      }
+    ]
+}
