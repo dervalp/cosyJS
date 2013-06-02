@@ -5,6 +5,8 @@ Full stack UI component library and layout generator
 
 ## Intro
 
+**cosyJS is still experimental and should not be used for production environment**
+
 The idea is to provide you out of the box a node.js server which manage all your static files (stylesheets, javascript templates, javascript lib,...).
 
 cosyJS has also some nice features out of the box like:
@@ -12,6 +14,14 @@ cosyJS has also some nice features out of the box like:
 * A layout generator using Bootstrap (and later Foundation and Cosy Grid Stystem)
 * A powerfull client-side library which allows you to play easily with your HTML and/or the cosyJS components. 
 * A library of full-stack components which has a set of UI element you use all the time (text, button, image).
+
+## Try it and give feedback
+
+This is published mainly to give the possibility to try cosy and give me feedback. Do not use this in a production environment. This is still experimental.
+
+```javascript
+npm install cosy
+```
 
 ## Shared Templates
 

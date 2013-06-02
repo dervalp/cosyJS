@@ -1,7 +1,7 @@
 {
-  "name": "cosy JS",
+  "name": "cosy",
   "description": "module to manage your static resources, full-stack UI component library, layout generator",
-  "version": "0.0.1",
+  "version": "0.0.1a",
   "author": "Pierre Derval <dervalp@gmail.com>",
   "dependencies": {
     "express": "3.0.3",
@@ -9,8 +9,9 @@
     "async": "*",
     "backbone": "*",
     "browserify": "*",
-    "handlerbars": "*",
-    "underscore": "*"
+    "handlebars": "*",
+    "underscore": "*",
+    "less": "*"
   },
   "devDependencies": {
     "grunt": "*",
