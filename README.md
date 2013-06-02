@@ -128,38 +128,19 @@ You page will also need a page structure, this page structure could be reuse by 
 Here is an example of a Page Structure:
 
 ```javascript
- var basicStructure = 
- {  
-  name:     "root",
-  order: 0,
-  columns:  [
+{  
+  "id":       "cosy",
+  "name":     "root",
+  "order":    "0",
+  "columns":  [
               {
-                name:     "header",
-                columns:  [
-                            { name: "logo", size:"4", parent: "header", order: 0 },
-                            { name: "menu", size:"8", parent: "header", order: 1 },
-                          ],
-                parent: "root",
-                order: 0
-              },
-              {
-                name:     "content",
-                columns:  [
-                            { name: "main", size:"12", parent: "content", order: 0 }                        
-                          ],
-                parent: "root",
-                order: 1
-              },
-              {
-                name:     "footer",
-                columns:  [
-                            { name: "footerContent", size:"12", parent: "footer", order: 0 }                            
-                          ],
-                parent: "root",
-                order: 2
+                "name":     "content",
+                "size": "12",
+                "parent": "root",
+                "order": "0"
               }
-  ]
-};
+            ]
+}
 ```
 
 The page structure defines the placeholders you want to add in your page.
@@ -174,12 +155,19 @@ Here is an example:
 
 ```javascript
   {
-    name: "index",
-    layout: "layout",    
-    route: "/",
-    components: [
-      { type: "text", category: "h1", id: "Logo", order:1 , dynamic: true, placeholder: "logo", data: { text: "Cosy Js" } },
-      { type: "image", source: "https://redappleapartments.files.wordpress.com/2012/05/copenhagen1.jpg", id: "image", order:4, placeholder: "main" },
+    "layout": "layout",
+    "name": "index",
+    "route": "/",
+    "components": [
+      { 
+        "type": "text",
+        "category": "h1",
+        "id": "Logo",
+        "order":1 ,
+        "dynamic": true,
+        "placeholder":"logo",
+        "data": { "text": "Cosy Js" }
+      }
     ]
   }
 ```
