@@ -15,6 +15,10 @@ cosyJS has also some nice features out of the box like:
 * A powerfull client-side library which allows you to play easily with your HTML and/or the cosyJS components. 
 * A library of full-stack components which has a set of UI element you use all the time (text, button, image).
 
+## Demo
+
+You can find an implementation of a the well know [toto app](https://github.com/dervalp/cosyJS-todo)
+
 ## Try it and give feedback
 
 This is published mainly to give the possibility to try cosy and give me feedback. Do not use this in a production environment. This is still experimental.
