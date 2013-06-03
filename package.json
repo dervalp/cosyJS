@@ -1,7 +1,7 @@
 {
   "name": "cosy",
   "description": "module to manage your static resources, full-stack UI component library, layout generator",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "author": "Pierre Derval <dervalp@gmail.com>",
   "dependencies": {
     "jade": "*",

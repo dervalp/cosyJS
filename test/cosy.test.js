@@ -20,6 +20,9 @@ describe('Given Cosy', function() {
         it('should have a start function', function() {          
             cosyApp.start.should.exists;
         });
+        it('should have a configuration file', function() {          
+            cosyApp.configuration.should.exists;
+        });
         it('should start server when calling start', function(done) {          
             cosyApp.start(function() {
                 done();
