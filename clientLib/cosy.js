@@ -2,15 +2,18 @@ var Backbone = require("Backbone"),
     rivets = require("rivets"),
     _ = require("underscore");
 
-Backbone.$ = function () {
-  return {
-    attr: function() { },
-    off: function() { },
-    on: function() { }
-  }
-};
+var isBrowser = typeof window !== 'undefined';
+if(!isBrowser) {
+  Backbone.$ = function () {
+    return {
+      attr: function() { },
+      off: function() { },
+      on: function() { }
+    }
+  };
 
-Backbone.$.get = function() { };
+  Backbone.$.get = function() { };
+}
 
 (function () {
     "use strict";
@@ -57,8 +60,6 @@ _c.templateEngine = templateEngine();
 _c.setEngine = function(tmplEngine) {
   _c.templateEngine = tmplEngine();
 };
-
-var isBrowser = typeof window !== 'undefined';
 /**
  * Rivets adapters
  */
@@ -175,7 +176,9 @@ var createComponent = function(name, model, view, collection) {
 
 _c.app = createApp;
 _c.components = { };
-_c.config = root.__c_conf || undefined;
+if(isBrowser) {
+  _c.config = window.__c_conf || undefined;
+}
 
 var emtpy = function() {};
 _c.component = function(obj) {
@@ -325,10 +328,17 @@ var parseApp = function(controls) {
 };
 
 var exposedComponent = function(control, initValues) {
-  var component = _c.components[control.type],
-      model = new component.model(initValues),
-      view = new component.view({ model: model, el: "." + control.id });
-
+  var component = _c.components[control.type] || undefined,
+      model,
+      view;
+  if(component) {
+    model = new component.model(initValues);
+    view = new component.view({ model: model, el: "." + control.id });
+  } else {
+    //try to create based html
+    model = new ComponentModel(initValues);
+    view = new ComponentView({ model: model, el: "." + control.id });
+  }
   _c.controls = _c.controls || [];
   _c.controls.push({ model: model, view: view });
 };
