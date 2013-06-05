@@ -65,6 +65,12 @@ _c.templateEngine = templateEngine();
 _c.setEngine = function(tmplEngine) {
   _c.templateEngine = tmplEngine();
 };
+
+var modules = {};
+
+_c.define = function(name, content) {
+  new Function(content).call(modules[name]);
+};
 /**
  * Rivets adapters
  */
@@ -92,9 +98,9 @@ if(isBrowser) {
 /**
  * Static Definitions
  */
-var ComponentModel = Backbone.Model;
+var ComponentModel = _c.Model = Backbone.Model;
 
-var ComponentView = Backbone.View.extend({
+var ComponentView = _c.View = Backbone.View.extend({
   render: function (cb) {
     var that = this;
     _c.templateEngine.get(this.model.get("type"), function(tmpl){
@@ -108,6 +114,7 @@ if(isBrowser) {
   ComponentView = ComponentView.extend({
     initialize: function() {
       rivets.bind(this.$el, { model: this.model });
+      this._cInit();
     }    
   });
 }
@@ -120,10 +127,9 @@ var Module = Backbone.Model.extend({
     initialize: function() {
         this.components = new Components();
     },
-    add: function(name, component) {
-        component.set("clientName", name);
-        this[name] = component;
-        this.components.add(component);
+    add: function(name, model) {
+        this[name] = model;
+        this.components.add(model);
     }
 });
 
@@ -166,7 +172,11 @@ var cInit = function() {
 };
 
 var createModule = function(name) {
-    return new Module();
+    var module = new Module();
+    module.name = name;
+    modules[name] = module;
+
+    return module;
 };
 
 var createComponent = function(name, model, view, collection) {
@@ -186,12 +196,6 @@ if(isBrowser) {
 }
 
 var emtpy = function() {};
-
-var scripts = [];
-
-_c.define = function(name, code) {
-  scripts.push({ name:name, code: code });
-}
 
 _c.component = function(obj) {
 
@@ -222,6 +226,9 @@ _c.component = function(obj) {
     });
 
     view = baseView.extend(functions);
+    view = view.extend({
+      _cInit: initialize
+    });
 
     if(obj["listenTo"]) {
       var listen = {},
@@ -263,18 +270,21 @@ function attachScript(options, cb){
     (document.head || document.getElementsByTagName('head')[0]).appendChild(script);
 }
 
-function cosify (content) {
-  return content;
+function cosify (content, mainModule) {
+  var module = mainModule,
+      result = "_.define("+ module.get("name") +", function() {" + content + "})()"; 
+  return result;
 };
 
-function attachAjax(options, cb) {
+function attachAjax(options, mainModule, cb) {
   $.get(options.url).done(function(content) {
     var script = document.createElement("script");
     script.type = "text/javascript";
-    script.text = cosify(content);
+    script.text = cosify(content, mainModule);
     script.onload = cb;
   }); 
 }
+
 
 var scriptLoadError = function() {
     console.log(arguments);
@@ -300,11 +310,9 @@ var load = function () {
         request = (arrModeEl && arrModeEl.length > 0) ? buildModRequest(arrModeEl) : "";
     
     if(request) {
-        console.log(request);
         attachScript({ url: request }, function() {
             console.log("loading Script is done");
             dfd.resolve("done");
-            return _c.trigger("cosy-loaded");
         });
     } else {
         _c.trigger("cosy-loaded");
@@ -331,6 +339,7 @@ var parseDom = function() {
     control.el = el;
     control.id = uniqueId;
     control.type = type;
+    control.key = id;
   });
 
   console.log("parsing Dom is done");
@@ -346,18 +355,21 @@ var buildInitialValues = function(id, config) {
 };
 
 var parseApp = function(controls) {
-  var ids = _.keys(controls);
+  var mainModule = _c.app("app").module("main"),
+      ids = _.keys(controls);
+
   _.each(ids, function(id) {
-    exposedComponent(controls[id], buildInitialValues(id, _c.config));
+    exposedComponent(controls[id], buildInitialValues(id, _c.config), mainModule);
   });
+  return _c.trigger("cosy-loaded", mainModule);
 };
 
+var loadBusinessScript = function (mainModule) {
 
-var loadBusinessScript = function () {
-  var nbScript = _c.__c_scripts.length, scriptLoaded = 0;
+  var scripts = window.__c_scripts, nbScript = scripts.length, scriptLoaded = 0;
 
-  nbScript.forEach(function(script){
-    attachAjax({ url: script }, function(){
+  scripts.forEach(function(script){
+    attachScript({ url: script }, function(){
       scriptLoaded++;
       if(scriptLoaded == nbScript) {
         _c.trigger("cosy-ready");
@@ -366,7 +378,7 @@ var loadBusinessScript = function () {
   });
 };
 
-var exposedComponent = function(control, initValues) {
+var exposedComponent = function(control, initValues, module) {
   var component = _c.components[control.type] || undefined,
       model,
       view;
@@ -379,7 +391,9 @@ var exposedComponent = function(control, initValues) {
     view = new ComponentView({ model: model, el: "." + control.id });
   }
   _c.controls = _c.controls || [];
-  _c.controls.push({ model: model, view: view });
+  _c.controls.push({ id: control.key, model: model, view: view });
+  module.add(control.key, model);
+
 };
 
 _.extend(_c, Backbone.Events);
