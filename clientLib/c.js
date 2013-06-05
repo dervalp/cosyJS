@@ -1,4 +1,1042 @@
 ;(function(e,t,n){function i(n,s){if(!t[n]){if(!e[n]){var o=typeof require=="function"&&require;if(!s&&o)return o(n,!0);if(r)return r(n,!0);throw new Error("Cannot find module '"+n+"'")}var u=t[n]={exports:{}};e[n][0].call(u.exports,function(t){var r=e[n][1][t];return i(r?r:t)},u,u.exports)}return t[n].exports}var r=typeof require=="function"&&require;for(var s=0;s<n.length;s++)i(n[s]);return i})({1:[function(require,module,exports){
+var Backbone = require("Backbone"),
+    rivets = require("rivets"),
+    _ = require("underscore");
+
+var isBrowser = typeof window !== 'undefined';
+if(!isBrowser) {
+  Backbone.$ = function () {
+    return {
+      attr: function() { },
+      off: function() { },
+      on: function() { }
+    }
+  };
+
+  Backbone.$.get = function() { };
+}
+
+(function () {
+    "use strict";
+
+var __domain = "http://localhost:3000";
+
+var root = this,
+    _cosy = this._c,
+    _c;
+
+if (typeof exports !== 'undefined') {
+    _c = exports;
+} else {    
+    _c = root._c = {};
+}
+
+if(isBrowser) {
+  window._c = _c;
+}
+
+_c.version = "0.0.1";
+
+
+_c.templates = {};
+
+var templateEngine = function() {
+  var cache = {};
+
+  return {
+    get: function(path) {
+      var template = cache[path];
+      if(!template) {
+        Backbone.$.get(path, function(data){
+          var compiled = _.template(data);
+          cache[path] = compiled;
+
+          return cb(compiled);  
+        });
+      } else {
+        return cb(template);
+      }
+    }
+  };
+};
+
+_c.templateEngine = templateEngine();
+
+_c.setEngine = function(tmplEngine) {
+  _c.templateEngine = tmplEngine();
+};
+/**
+ * Rivets adapters
+ */
+if(isBrowser) {
+  rivets.configure({
+    adapter: {
+      subscribe: function(obj, keypath, callback) {
+        callback.wrapped = function(m, v) { callback(v) };
+        obj.on('change:' + keypath, callback.wrapped);
+      },
+      unsubscribe: function(obj, keypath, callback) {
+        obj.off('change:' + keypath, callback.wrapped);
+      },
+      read: function(obj, keypath) {
+        return obj.get(keypath);
+      },
+      publish: function(obj, keypath, value) {
+        obj.set(keypath, value);
+      }
+    }
+  });
+}
+
+
+/**
+ * Static Definitions
+ */
+var ComponentModel = Backbone.Model;
+
+var ComponentView = Backbone.View.extend({
+  render: function (cb) {
+    var that = this;
+    _c.templateEngine.get(this.model.get("type"), function(tmpl){
+      var html = tmpl(that.model.toJSON());
+      return cb(html);
+    });
+  }
+});
+
+if(isBrowser) {
+  ComponentView = ComponentView.extend({
+    initialize: function() {
+      rivets.bind(this.$el, { model: this.model });
+    }    
+  });
+}
+
+var Components = Backbone.Collection.extend({
+    model: ComponentModel
+});
+
+var Module = Backbone.Model.extend({
+    initialize: function() {
+        this.components = new Components();
+    },
+    add: function(name, component) {
+        component.set("clientName", name);
+        this[name] = component;
+        this.components.add(component);
+    }
+});
+
+var Modules = Backbone.Collection.extend({
+    model: Module
+});
+
+var App = Backbone.Model.extend({
+    initialize: function(options) {
+        this.modules = new Modules();
+    },
+    module: function(name) {
+
+      var module = createModule(name);
+      
+      this.modules.add(module);
+      this[name] = module;
+
+      return module;
+    }
+});
+
+/**
+ * Factories
+ */
+var createApp = function(id) {
+    return new App({ id: id});
+};
+
+var cInit = function() {
+
+  var cAttrs = this._cAttrs;
+
+  /*here we should use JSON init object instead */
+  _.each(cAttrs, function(attr) {
+    if(attr["on"]) {
+      this.model.on("change:" + attr["name"], this[attr["on"]], this);
+    }
+  }, this);
+};
+
+var createModule = function(name) {
+    return new Module();
+};
+
+var createComponent = function(name, model, view, collection) {
+    if(_c.components[name]) { throw name + " component already existing"; }
+
+    _c.components[name] = {
+        model: model,
+        view: view,
+        collection: collection
+    };
+};
+
+_c.app = createApp;
+_c.components = { };
+if(isBrowser) {
+  _c.config = window.__c_conf || undefined;
+}
+
+var emtpy = function() {};
+
+var scripts = [];
+
+_c.define = function(name, code) {
+  scripts.push({ name:name, code: code });
+}
+
+_c.component = function(obj) {
+
+    var componentName = obj.type,
+        attrs = obj.attributes,
+        based = ["attributes", "name", "base", "plugin", "initialize", "listenTo", "extendModel"],
+        functions = _.omit(obj, based),
+        baseModel = ComponentModel,
+        baseView = ComponentView,
+        extendModel = obj.extendModel || { },
+        initialize = obj.initialize || emtpy,
+        collection = obj.collection,
+        exposed,
+        model,
+        view;
+    
+    var extendModel = _.extend(extendModel, {
+        initialize: function() {
+          this._cInit();
+        },
+        _cInit: cInit
+    });
+
+    model = baseModel.extend(extendModel);
+   
+    model = model.extend({
+      _cAttrs: attrs
+    });
+
+    view = baseView.extend(functions);
+
+    if(obj["listenTo"]) {
+      var listen = {},
+          parent = baseView.prototype.listen,
+          listenTo = obj["listenTo"],
+          listenKeys = _.keys(listenTo);
+
+      _.each(listenKeys, function(key){
+        //build the listen
+        listen[key + ":$this"] = listenTo[key]
+      });
+      listen = _.extend(parent, listen);
+
+      ComponentModel = _.extend(ComponentModel, listen);
+    }
+
+    var exposedCollection;
+
+    if(collection) {
+      exposedCollection = Backbone.Collection.extend({
+        model: model
+      });
+    }
+
+    createComponent(componentName , model, view, exposedCollection);
+};
+
+/**
+* Attaches a script to the DOM and executes it.
+* @param {options} object, normally with .url
+* @param {cb} callback, called when script is loaded
+*/
+function attachScript(options, cb){
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src = options.url;
+    script.onload = cb;
+    script.onerror = scriptLoadError;
+    (document.head || document.getElementsByTagName('head')[0]).appendChild(script);
+}
+
+function cosify (content) {
+  return content;
+};
+
+function attachAjax(options, cb) {
+  $.get(options.url).done(function(content) {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.text = cosify(content);
+    script.onload = cb;
+  }); 
+}
+
+var scriptLoadError = function() {
+    console.log(arguments);
+};
+var buildModRequest = function(modulesElem) {
+    var allScript = modulesElem,
+        request = __domain + "/load/comp?mod=[",
+        end = "]",
+        mod = [];
+
+    _.each(allScript, function(comp) {
+        var type = comp["type"];
+        mod.push(type);
+    });
+
+    return request + mod.join(",") + end;
+};
+
+var load = function () {
+    var dfd = new jQuery.Deferred();
+ 
+    var arrModeEl = _c.config,
+        request = (arrModeEl && arrModeEl.length > 0) ? buildModRequest(arrModeEl) : "";
+    
+    if(request) {
+        console.log(request);
+        attachScript({ url: request }, function() {
+            console.log("loading Script is done");
+            dfd.resolve("done");
+            return _c.trigger("cosy-loaded");
+        });
+    } else {
+        _c.trigger("cosy-loaded");
+        dfd.resolve("done");
+    }
+ 
+    // Return the Promise so caller can't change the Deferred
+    return dfd.promise();
+};
+
+var parseDom = function() {
+  var dfd = new jQuery.Deferred(),
+      controls = {};
+
+  var els = document.querySelectorAll("[cosy-type]");
+
+  _.each(els, function(el) {
+    var id = el.getAttribute("cosy-id"),
+        type = el.getAttribute("cosy-type"),
+        uniqueId = _.uniqueId("comp_"),
+        control = controls[id] = {};
+
+    el.className += " " + uniqueId;
+    control.el = el;
+    control.id = uniqueId;
+    control.type = type;
+  });
+
+  console.log("parsing Dom is done");
+  dfd.resolve(controls);
+
+  return dfd.promise();
+};
+
+var buildInitialValues = function(id, config) {
+  return _.find(config, function (conf) {
+    return conf.id === id;
+  }).data;
+};
+
+var parseApp = function(controls) {
+  var ids = _.keys(controls);
+  _.each(ids, function(id) {
+    exposedComponent(controls[id], buildInitialValues(id, _c.config));
+  });
+};
+
+
+var loadBusinessScript = function () {
+  var nbScript = _c.__c_scripts.length, scriptLoaded = 0;
+
+  nbScript.forEach(function(script){
+    attachAjax({ url: script }, function(){
+      scriptLoaded++;
+      if(scriptLoaded == nbScript) {
+        _c.trigger("cosy-ready");
+      }
+    });
+  });
+};
+
+var exposedComponent = function(control, initValues) {
+  var component = _c.components[control.type] || undefined,
+      model,
+      view;
+  if(component) {
+    model = new component.model(initValues);
+    view = new component.view({ model: model, el: "." + control.id });
+  } else {
+    //try to create based html
+    model = new ComponentModel(initValues);
+    view = new ComponentView({ model: model, el: "." + control.id });
+  }
+  _c.controls = _c.controls || [];
+  _c.controls.push({ model: model, view: view });
+};
+
+_.extend(_c, Backbone.Events);
+
+if(isBrowser) {
+  jQuery.when(parseDom(), load()).done(parseApp);
+  _c.on("cosy-loaded", loadBusinessScript);
+}
+
+}).call(this);
+},{"Backbone":2,"rivets":3,"underscore":4}],3:[function(require,module,exports){
+// rivets.js
+// version: 0.4.9
+// author: Michael Richards
+// license: MIT
+(function() {
+  var Rivets, bindEvent, factory, getInputValue, unbindEvent,
+    __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
+    __slice = [].slice,
+    __indexOf = [].indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; };
+
+  Rivets = {};
+
+  if (!String.prototype.trim) {
+    String.prototype.trim = function() {
+      return this.replace(/^\s+|\s+$/g, '');
+    };
+  }
+
+  Rivets.Binding = (function() {
+
+    function Binding(el, type, model, keypath, options) {
+      var identifier, regexp, value, _ref;
+      this.el = el;
+      this.type = type;
+      this.model = model;
+      this.keypath = keypath;
+      this.options = options != null ? options : {};
+      this.unbind = __bind(this.unbind, this);
+
+      this.bind = __bind(this.bind, this);
+
+      this.publish = __bind(this.publish, this);
+
+      this.sync = __bind(this.sync, this);
+
+      this.set = __bind(this.set, this);
+
+      this.formattedValue = __bind(this.formattedValue, this);
+
+      if (!(this.binder = Rivets.binders[type])) {
+        _ref = Rivets.binders;
+        for (identifier in _ref) {
+          value = _ref[identifier];
+          if (identifier !== '*' && identifier.indexOf('*') !== -1) {
+            regexp = new RegExp("^" + (identifier.replace('*', '.+')) + "$");
+            if (regexp.test(type)) {
+              this.binder = value;
+              this.args = new RegExp("^" + (identifier.replace('*', '(.+)')) + "$").exec(type);
+              this.args.shift();
+            }
+          }
+        }
+      }
+      this.binder || (this.binder = Rivets.binders['*']);
+      if (this.binder instanceof Function) {
+        this.binder = {
+          routine: this.binder
+        };
+      }
+      this.formatters = this.options.formatters || [];
+    }
+
+    Binding.prototype.formattedValue = function(value) {
+      var args, formatter, id, _i, _len, _ref, _ref1, _ref2, _ref3;
+      _ref = this.formatters;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        formatter = _ref[_i];
+        args = formatter.split(/\s+/);
+        id = args.shift();
+        formatter = this.model[id] instanceof Function ? this.model[id] : ((_ref1 = this.options) != null ? (_ref2 = _ref1.bindingOptions) != null ? (_ref3 = _ref2.formatters) != null ? _ref3[id] : void 0 : void 0 : void 0) instanceof Function ? this.options.bindingOptions.formatters[id] : Rivets.formatters[id];
+        if ((formatter != null ? formatter.read : void 0) instanceof Function) {
+          value = formatter.read.apply(formatter, [value].concat(__slice.call(args)));
+        } else if (formatter instanceof Function) {
+          value = formatter.apply(null, [value].concat(__slice.call(args)));
+        }
+      }
+      return value;
+    };
+
+    Binding.prototype.set = function(value) {
+      var _ref;
+      value = value instanceof Function && !this.binder["function"] ? this.formattedValue(value.call(this.model)) : this.formattedValue(value);
+      return (_ref = this.binder.routine) != null ? _ref.call(this, this.el, value) : void 0;
+    };
+
+    Binding.prototype.sync = function() {
+      return this.set(this.options.bypass ? this.model[this.keypath] : Rivets.config.adapter.read(this.model, this.keypath));
+    };
+
+    Binding.prototype.publish = function() {
+      var args, formatter, id, value, _i, _len, _ref, _ref1, _ref2;
+      value = getInputValue(this.el);
+      _ref = this.formatters.slice(0).reverse();
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        formatter = _ref[_i];
+        args = formatter.split(/\s+/);
+        id = args.shift();
+        if ((_ref1 = Rivets.formatters[id]) != null ? _ref1.publish : void 0) {
+          value = (_ref2 = Rivets.formatters[id]).publish.apply(_ref2, [value].concat(__slice.call(args)));
+        }
+      }
+      return Rivets.config.adapter.publish(this.model, this.keypath, value);
+    };
+
+    Binding.prototype.bind = function() {
+      var dependency, keypath, model, _i, _len, _ref, _ref1, _ref2, _results;
+      if ((_ref = this.binder.bind) != null) {
+        _ref.call(this, this.el);
+      }
+      if (this.options.bypass) {
+        this.sync();
+      } else {
+        Rivets.config.adapter.subscribe(this.model, this.keypath, this.sync);
+        if (Rivets.config.preloadData) {
+          this.sync();
+        }
+      }
+      if ((_ref1 = this.options.dependencies) != null ? _ref1.length : void 0) {
+        _ref2 = this.options.dependencies;
+        _results = [];
+        for (_i = 0, _len = _ref2.length; _i < _len; _i++) {
+          dependency = _ref2[_i];
+          if (/^\./.test(dependency)) {
+            model = this.model;
+            keypath = dependency.substr(1);
+          } else {
+            dependency = dependency.split('.');
+            model = this.view.models[dependency.shift()];
+            keypath = dependency.join('.');
+          }
+          _results.push(Rivets.config.adapter.subscribe(model, keypath, this.sync));
+        }
+        return _results;
+      }
+    };
+
+    Binding.prototype.unbind = function() {
+      var dependency, keypath, model, _i, _len, _ref, _ref1, _ref2, _results;
+      if ((_ref = this.binder.unbind) != null) {
+        _ref.call(this, this.el);
+      }
+      if (!this.options.bypass) {
+        Rivets.config.adapter.unsubscribe(this.model, this.keypath, this.sync);
+      }
+      if ((_ref1 = this.options.dependencies) != null ? _ref1.length : void 0) {
+        _ref2 = this.options.dependencies;
+        _results = [];
+        for (_i = 0, _len = _ref2.length; _i < _len; _i++) {
+          dependency = _ref2[_i];
+          if (/^\./.test(dependency)) {
+            model = this.model;
+            keypath = dependency.substr(1);
+          } else {
+            dependency = dependency.split('.');
+            model = this.view.models[dependency.shift()];
+            keypath = dependency.join('.');
+          }
+          _results.push(Rivets.config.adapter.unsubscribe(model, keypath, this.sync));
+        }
+        return _results;
+      }
+    };
+
+    return Binding;
+
+  })();
+
+  Rivets.View = (function() {
+
+    function View(els, models, options) {
+      this.els = els;
+      this.models = models;
+      this.options = options;
+      this.publish = __bind(this.publish, this);
+
+      this.sync = __bind(this.sync, this);
+
+      this.unbind = __bind(this.unbind, this);
+
+      this.bind = __bind(this.bind, this);
+
+      this.select = __bind(this.select, this);
+
+      this.build = __bind(this.build, this);
+
+      this.bindingRegExp = __bind(this.bindingRegExp, this);
+
+      if (!(this.els.jquery || this.els instanceof Array)) {
+        this.els = [this.els];
+      }
+      this.build();
+    }
+
+    View.prototype.bindingRegExp = function() {
+      var prefix;
+      prefix = Rivets.config.prefix;
+      if (prefix) {
+        return new RegExp("^data-" + prefix + "-");
+      } else {
+        return /^data-/;
+      }
+    };
+
+    View.prototype.build = function() {
+      var bindingRegExp, el, node, parse, skipNodes, _i, _j, _len, _len1, _ref, _ref1,
+        _this = this;
+      this.bindings = [];
+      skipNodes = [];
+      bindingRegExp = this.bindingRegExp();
+      parse = function(node) {
+        var attribute, attributes, binder, binding, context, ctx, dependencies, identifier, keypath, model, n, options, path, pipe, pipes, regexp, splitPath, type, value, _i, _j, _k, _len, _len1, _len2, _ref, _ref1, _ref2, _ref3;
+        if (__indexOf.call(skipNodes, node) < 0) {
+          _ref = node.attributes;
+          for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+            attribute = _ref[_i];
+            if (bindingRegExp.test(attribute.name)) {
+              type = attribute.name.replace(bindingRegExp, '');
+              if (!(binder = Rivets.binders[type])) {
+                _ref1 = Rivets.binders;
+                for (identifier in _ref1) {
+                  value = _ref1[identifier];
+                  if (identifier !== '*' && identifier.indexOf('*') !== -1) {
+                    regexp = new RegExp("^" + (identifier.replace('*', '.+')) + "$");
+                    if (regexp.test(type)) {
+                      binder = value;
+                    }
+                  }
+                }
+              }
+              binder || (binder = Rivets.binders['*']);
+              if (binder.block) {
+                _ref2 = node.getElementsByTagName('*');
+                for (_j = 0, _len1 = _ref2.length; _j < _len1; _j++) {
+                  n = _ref2[_j];
+                  skipNodes.push(n);
+                }
+                attributes = [attribute];
+              }
+            }
+          }
+          _ref3 = attributes || node.attributes;
+          for (_k = 0, _len2 = _ref3.length; _k < _len2; _k++) {
+            attribute = _ref3[_k];
+            if (bindingRegExp.test(attribute.name)) {
+              options = {};
+              if ((_this.options != null) && typeof _this.options === 'object') {
+                options.bindingOptions = _this.options;
+              }
+              type = attribute.name.replace(bindingRegExp, '');
+              pipes = (function() {
+                var _l, _len3, _ref4, _results;
+                _ref4 = attribute.value.split('|');
+                _results = [];
+                for (_l = 0, _len3 = _ref4.length; _l < _len3; _l++) {
+                  pipe = _ref4[_l];
+                  _results.push(pipe.trim());
+                }
+                return _results;
+              })();
+              context = (function() {
+                var _l, _len3, _ref4, _results;
+                _ref4 = pipes.shift().split('<');
+                _results = [];
+                for (_l = 0, _len3 = _ref4.length; _l < _len3; _l++) {
+                  ctx = _ref4[_l];
+                  _results.push(ctx.trim());
+                }
+                return _results;
+              })();
+              path = context.shift();
+              splitPath = path.split(/\.|:/);
+              options.formatters = pipes;
+              options.bypass = path.indexOf(':') !== -1;
+              if (splitPath[0]) {
+                model = _this.models[splitPath.shift()];
+              } else {
+                model = _this.models;
+                splitPath.shift();
+              }
+              keypath = splitPath.join('.');
+              if (model) {
+                if (dependencies = context.shift()) {
+                  options.dependencies = dependencies.split(/\s+/);
+                }
+                binding = new Rivets.Binding(node, type, model, keypath, options);
+                binding.view = _this;
+                _this.bindings.push(binding);
+              }
+            }
+          }
+          if (attributes) {
+            attributes = null;
+          }
+        }
+      };
+      _ref = this.els;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        el = _ref[_i];
+        parse(el);
+        _ref1 = el.getElementsByTagName('*');
+        for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
+          node = _ref1[_j];
+          if (node.attributes != null) {
+            parse(node);
+          }
+        }
+      }
+    };
+
+    View.prototype.select = function(fn) {
+      var binding, _i, _len, _ref, _results;
+      _ref = this.bindings;
+      _results = [];
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        binding = _ref[_i];
+        if (fn(binding)) {
+          _results.push(binding);
+        }
+      }
+      return _results;
+    };
+
+    View.prototype.bind = function() {
+      var binding, _i, _len, _ref, _results;
+      _ref = this.bindings;
+      _results = [];
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        binding = _ref[_i];
+        _results.push(binding.bind());
+      }
+      return _results;
+    };
+
+    View.prototype.unbind = function() {
+      var binding, _i, _len, _ref, _results;
+      _ref = this.bindings;
+      _results = [];
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        binding = _ref[_i];
+        _results.push(binding.unbind());
+      }
+      return _results;
+    };
+
+    View.prototype.sync = function() {
+      var binding, _i, _len, _ref, _results;
+      _ref = this.bindings;
+      _results = [];
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        binding = _ref[_i];
+        _results.push(binding.sync());
+      }
+      return _results;
+    };
+
+    View.prototype.publish = function() {
+      var binding, _i, _len, _ref, _results;
+      _ref = this.select(function(b) {
+        return b.binder.publishes;
+      });
+      _results = [];
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        binding = _ref[_i];
+        _results.push(binding.publish());
+      }
+      return _results;
+    };
+
+    return View;
+
+  })();
+
+  bindEvent = function(el, event, handler, context) {
+    var fn;
+    fn = function(e) {
+      return handler.call(context, e);
+    };
+    if (window.jQuery != null) {
+      el = jQuery(el);
+      if (el.on != null) {
+        el.on(event, fn);
+      } else {
+        el.bind(event, fn);
+      }
+    } else if (window.addEventListener != null) {
+      el.addEventListener(event, fn, false);
+    } else {
+      event = 'on' + event;
+      el.attachEvent(event, fn);
+    }
+    return fn;
+  };
+
+  unbindEvent = function(el, event, fn) {
+    if (window.jQuery != null) {
+      el = jQuery(el);
+      if (el.off != null) {
+        return el.off(event, fn);
+      } else {
+        return el.unbind(event, fn);
+      }
+    } else if (window.removeEventListener) {
+      return el.removeEventListener(event, fn, false);
+    } else {
+      event = 'on' + event;
+      return el.detachEvent(event, fn);
+    }
+  };
+
+  getInputValue = function(el) {
+    var o, _i, _len, _results;
+    if (window.jQuery != null) {
+      el = jQuery(el);
+      switch (el[0].type) {
+        case 'checkbox':
+          return el.is(':checked');
+        default:
+          return el.val();
+      }
+    } else {
+      switch (el.type) {
+        case 'checkbox':
+          return el.checked;
+        case 'select-multiple':
+          _results = [];
+          for (_i = 0, _len = el.length; _i < _len; _i++) {
+            o = el[_i];
+            if (o.selected) {
+              _results.push(o.value);
+            }
+          }
+          return _results;
+          break;
+        default:
+          return el.value;
+      }
+    }
+  };
+
+  Rivets.binders = {
+    enabled: function(el, value) {
+      return el.disabled = !value;
+    },
+    disabled: function(el, value) {
+      return el.disabled = !!value;
+    },
+    checked: {
+      publishes: true,
+      bind: function(el) {
+        return this.currentListener = bindEvent(el, 'change', this.publish);
+      },
+      unbind: function(el) {
+        return unbindEvent(el, 'change', this.currentListener);
+      },
+      routine: function(el, value) {
+        var _ref;
+        if (el.type === 'radio') {
+          return el.checked = ((_ref = el.value) != null ? _ref.toString() : void 0) === (value != null ? value.toString() : void 0);
+        } else {
+          return el.checked = !!value;
+        }
+      }
+    },
+    unchecked: {
+      publishes: true,
+      bind: function(el) {
+        return this.currentListener = bindEvent(el, 'change', this.publish);
+      },
+      unbind: function(el) {
+        return unbindEvent(el, 'change', this.currentListener);
+      },
+      routine: function(el, value) {
+        var _ref;
+        if (el.type === 'radio') {
+          return el.checked = ((_ref = el.value) != null ? _ref.toString() : void 0) !== (value != null ? value.toString() : void 0);
+        } else {
+          return el.checked = !value;
+        }
+      }
+    },
+    show: function(el, value) {
+      return el.style.display = value ? '' : 'none';
+    },
+    hide: function(el, value) {
+      return el.style.display = value ? 'none' : '';
+    },
+    html: function(el, value) {
+      return el.innerHTML = value != null ? value : '';
+    },
+    value: {
+      publishes: true,
+      bind: function(el) {
+        return this.currentListener = bindEvent(el, 'change', this.publish);
+      },
+      unbind: function(el) {
+        return unbindEvent(el, 'change', this.currentListener);
+      },
+      routine: function(el, value) {
+        var o, _i, _len, _ref, _ref1, _ref2, _results;
+        if (window.jQuery != null) {
+          el = jQuery(el);
+          if ((value != null ? value.toString() : void 0) !== ((_ref = el.val()) != null ? _ref.toString() : void 0)) {
+            return el.val(value != null ? value : '');
+          }
+        } else {
+          if (el.type === 'select-multiple') {
+            if (value != null) {
+              _results = [];
+              for (_i = 0, _len = el.length; _i < _len; _i++) {
+                o = el[_i];
+                _results.push(o.selected = (_ref1 = o.value, __indexOf.call(value, _ref1) >= 0));
+              }
+              return _results;
+            }
+          } else if ((value != null ? value.toString() : void 0) !== ((_ref2 = el.value) != null ? _ref2.toString() : void 0)) {
+            return el.value = value != null ? value : '';
+          }
+        }
+      }
+    },
+    text: function(el, value) {
+      if (el.innerText != null) {
+        return el.innerText = value != null ? value : '';
+      } else {
+        return el.textContent = value != null ? value : '';
+      }
+    },
+    "on-*": {
+      "function": true,
+      routine: function(el, value) {
+        if (this.currentListener) {
+          unbindEvent(el, this.args[0], this.currentListener);
+        }
+        return this.currentListener = bindEvent(el, this.args[0], value, this.model);
+      }
+    },
+    "each-*": {
+      block: true,
+      bind: function(el, collection) {
+        return el.removeAttribute(['data', Rivets.config.prefix, this.type].join('-').replace('--', '-'));
+      },
+      routine: function(el, collection) {
+        var data, e, item, itemEl, m, n, previous, view, _i, _j, _k, _len, _len1, _len2, _ref, _ref1, _ref2, _ref3, _results;
+        if (this.iterated != null) {
+          _ref = this.iterated;
+          for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+            view = _ref[_i];
+            view.unbind();
+            _ref1 = view.els;
+            for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
+              e = _ref1[_j];
+              e.parentNode.removeChild(e);
+            }
+          }
+        } else {
+          this.marker = document.createComment(" rivets: " + this.type + " ");
+          el.parentNode.insertBefore(this.marker, el);
+          el.parentNode.removeChild(el);
+        }
+        this.iterated = [];
+        if (collection) {
+          _results = [];
+          for (_k = 0, _len2 = collection.length; _k < _len2; _k++) {
+            item = collection[_k];
+            data = {};
+            _ref2 = this.view.models;
+            for (n in _ref2) {
+              m = _ref2[n];
+              data[n] = m;
+            }
+            data[this.args[0]] = item;
+            itemEl = el.cloneNode(true);
+            previous = this.iterated.length ? this.iterated[this.iterated.length - 1].els[0] : this.marker;
+            this.marker.parentNode.insertBefore(itemEl, (_ref3 = previous.nextSibling) != null ? _ref3 : null);
+            view = new Rivets.View(itemEl, data);
+            view.bind();
+            _results.push(this.iterated.push(view));
+          }
+          return _results;
+        }
+      }
+    },
+    "class-*": function(el, value) {
+      var elClass;
+      elClass = " " + el.className + " ";
+      if (!value === (elClass.indexOf(" " + this.args[0] + " ") !== -1)) {
+        return el.className = value ? "" + el.className + " " + this.args[0] : elClass.replace(" " + this.args[0] + " ", ' ').trim();
+      }
+    },
+    "*": function(el, value) {
+      if (value) {
+        return el.setAttribute(this.type, value);
+      } else {
+        return el.removeAttribute(this.type);
+      }
+    }
+  };
+
+  Rivets.config = {
+    preloadData: true
+  };
+
+  Rivets.formatters = {};
+
+  factory = function(exports) {
+    exports.binders = Rivets.binders;
+    exports.formatters = Rivets.formatters;
+    exports.config = Rivets.config;
+    exports.configure = function(options) {
+      var property, value;
+      if (options == null) {
+        options = {};
+      }
+      for (property in options) {
+        value = options[property];
+        Rivets.config[property] = value;
+      }
+    };
+    return exports.bind = function(el, models, options) {
+      var view;
+      if (models == null) {
+        models = {};
+      }
+      if (options == null) {
+        options = {};
+      }
+      view = new Rivets.View(el, models, options);
+      view.bind();
+      return view;
+    };
+  };
+
+  if (typeof exports === 'object') {
+    factory(exports);
+  } else if (typeof define === 'function' && define.amd) {
+    define(['exports'], function(exports) {
+      factory(this.rivets = exports);
+      return exports;
+    });
+  } else {
+    factory(this.rivets = {});
+  }
+
+}).call(this);
+
+},{}],4:[function(require,module,exports){
 (function(){//     Underscore.js 1.4.4
 //     http://underscorejs.org
 //     (c) 2009-2013 Jeremy Ashkenas, DocumentCloud Inc.
@@ -1228,1113 +2266,6 @@
 
 })()
 },{}],2:[function(require,module,exports){
-var Backbone = require("Backbone"),
-    rivets = require("rivets"),
-    _ = require("underscore");
-
-var isBrowser = typeof window !== 'undefined';
-if(!isBrowser) {
-  Backbone.$ = function () {
-    return {
-      attr: function() { },
-      off: function() { },
-      on: function() { }
-    }
-  };
-
-  Backbone.$.get = function() { };
-}
-
-(function () {
-    "use strict";
-
-var __domain = "http://localhost:3000";
-
-var root = this,
-    _cosy = this._c,
-    _c;
-
-if (typeof exports !== 'undefined') {
-    _c = exports;
-} else {    
-    _c = root._c = {};
-}
-
-_c.version = "0.0.1";
-
-
-_c.templates = {};
-
-var templateEngine = function() {
-  var cache = {};
-
-  return {
-    get: function(path) {
-      var template = cache[path];
-      if(!template) {
-        Backbone.$.get(path, function(data){
-          var compiled = _.template(data);
-          cache[path] = compiled;
-
-          return cb(compiled);  
-        });
-      } else {
-        return cb(template);
-      }
-    }
-  };
-};
-
-_c.templateEngine = templateEngine();
-
-_c.setEngine = function(tmplEngine) {
-  _c.templateEngine = tmplEngine();
-};
-/**
- * Rivets adapters
- */
-if(isBrowser) {
-  rivets.configure({
-    adapter: {
-      subscribe: function(obj, keypath, callback) {
-        callback.wrapped = function(m, v) { callback(v) };
-        obj.on('change:' + keypath, callback.wrapped);
-      },
-      unsubscribe: function(obj, keypath, callback) {
-        obj.off('change:' + keypath, callback.wrapped);
-      },
-      read: function(obj, keypath) {
-        return obj.get(keypath);
-      },
-      publish: function(obj, keypath, value) {
-        obj.set(keypath, value);
-      }
-    }
-  });
-}
-
-
-/**
- * Static Definitions
- */
-var ComponentModel = Backbone.Model;
-
-var ComponentView = Backbone.View.extend({
-  render: function (cb) {
-    var that = this;
-    _c.templateEngine.get(this.model.get("type"), function(tmpl){
-      var html = tmpl(that.model.toJSON());
-      return cb(html);
-    });
-  }
-});
-
-if(isBrowser) {
-  ComponentView = ComponentView.extend({
-    initialize: function() {
-      rivets.bind(this.$el, { model: this.model });
-    }    
-  });
-}
-
-var Components = Backbone.Collection.extend({
-    model: ComponentModel
-});
-
-var Module = Backbone.Model.extend({
-    initialize: function() {
-        this.components = new Components();
-    },
-    add: function(name, component) {
-        component.set("clientName", name);
-        this[name] = component;
-        this.components.add(component);
-    }
-});
-
-var Modules = Backbone.Collection.extend({
-    model: Module
-});
-
-var App = Backbone.Model.extend({
-    initialize: function(options) {
-        this.modules = new Modules();
-    },
-    module: function(name) {
-
-      var module = createModule(name);
-      
-      this.modules.add(module);
-      this[name] = module;
-
-      return module;
-    }
-});
-
-/**
- * Factories
- */
-var createApp = function(id) {
-    return new App({ id: id});
-};
-
-var cInit = function() {
-
-  var cAttrs = this._cAttrs;
-
-  /*here we should use JSON init object instead */
-  _.each(cAttrs, function(attr) {
-    if(attr["on"]) {
-      this.model.on("change:" + attr["name"], this[attr["on"]], this);
-    }
-  }, this);
-};
-
-var createModule = function(name) {
-    return new Module();
-};
-
-var createComponent = function(name, model, view, collection) {
-    if(_c.components[name]) { throw name + " component already existing"; }
-
-    _c.components[name] = {
-        model: model,
-        view: view,
-        collection: collection
-    };
-};
-
-_c.app = createApp;
-_c.components = { };
-if(isBrowser) {
-  _c.config = window.__c_conf || undefined;
-}
-
-var emtpy = function() {};
-_c.component = function(obj) {
-
-    var componentName = obj.type,
-        attrs = obj.attributes,
-        based = ["attributes", "name", "base", "plugin", "initialize", "listenTo", "extendModel"],
-        functions = _.omit(obj, based),
-        baseModel = ComponentModel,
-        baseView = ComponentView,
-        extendModel = obj.extendModel || { },
-        initialize = obj.initialize || emtpy,
-        collection = obj.collection,
-        exposed,
-        model,
-        view;
-    
-    var extendModel = _.extend(extendModel, {
-        initialize: function() {
-          this._cInit();
-        },
-        _cInit: cInit
-    });
-
-    model = baseModel.extend(extendModel);
-   
-    model = model.extend({
-      _cAttrs: attrs
-    });
-
-    view = baseView.extend(functions);
-
-    if(obj["listenTo"]) {
-      var listen = {},
-          parent = baseView.prototype.listen,
-          listenTo = obj["listenTo"],
-          listenKeys = _.keys(listenTo);
-
-      _.each(listenKeys, function(key){
-        //build the listen
-        listen[key + ":$this"] = listenTo[key]
-      });
-      listen = _.extend(parent, listen);
-
-      ComponentModel = _.extend(ComponentModel, listen);
-    }
-
-    var exposedCollection;
-
-    if(collection) {
-      exposedCollection = Backbone.Collection.extend({
-        model: model
-      });
-    }
-
-    createComponent(componentName , model, view, exposedCollection);
-};
-
-/**
-* Attaches a script to the DOM and executes it.
-* @param {options} object, normally with .url
-* @param {cb} callback, called when script is loaded
-*/
-function attachScript(options, cb){
-    var script = document.createElement("script");
-    script.type = "text/javascript";
-    script.src = options.url;
-    script.onload = cb;
-    script.onerror = scriptLoadError;
-    (document.head || document.getElementsByTagName('head')[0]).appendChild(script);
-}
-
-var scriptLoadError = function() {
-    console.log(arguments);
-};
-var buildModRequest = function(modulesElem) {
-    var allScript = modulesElem,
-        request = __domain + "/load/comp?mod=[",
-        end = "]",
-        mod = [];
-
-    _.each(allScript, function(comp) {
-        var type = comp["type"];
-        mod.push(type);
-    });
-
-    return request + mod.join(",") + end;
-};
-
-var load = function () {
-    var dfd = new jQuery.Deferred();
- 
-    var arrModeEl = _c.config,
-        request = (arrModeEl && arrModeEl.length > 0) ? buildModRequest(arrModeEl) : "";
-    
-    if(request) {
-        console.log(request);
-        attachScript({ url: request }, function() {
-            console.log("loading Script is done");
-            dfd.resolve("done");
-            return _c.trigger("cosy-loaded");
-        });
-    } else {
-        _c.trigger("cosy-loaded");
-        dfd.resolve("done");
-    }
- 
-    // Return the Promise so caller can't change the Deferred
-    return dfd.promise();
-};
-
-var parseDom = function() {
-  var dfd = new jQuery.Deferred(),
-      controls = {};
-
-  var els = document.querySelectorAll("[cosy-type]");
-
-  _.each(els, function(el) {
-    var id = el.getAttribute("cosy-id"),
-        type = el.getAttribute("cosy-type"),
-        uniqueId = _.uniqueId("comp_"),
-        control = controls[id] = {};
-
-    el.className += " " + uniqueId;
-    control.el = el;
-    control.id = uniqueId;
-    control.type = type;
-  });
-
-  console.log("parsing Dom is done");
-  dfd.resolve(controls);
-
-  return dfd.promise();
-};
-
-var buildInitialValues = function(id, config) {
-  return _.find(config, function (conf) {
-    return conf.id === id;
-  }).data;
-};
-
-var parseApp = function(controls) {
-  var ids = _.keys(controls);
-  _.each(ids, function(id) {
-    exposedComponent(controls[id], buildInitialValues(id, _c.config));
-  });
-};
-
-var exposedComponent = function(control, initValues) {
-  var component = _c.components[control.type] || undefined,
-      model,
-      view;
-  if(component) {
-    model = new component.model(initValues);
-    view = new component.view({ model: model, el: "." + control.id });
-  } else {
-    //try to create based html
-    model = new ComponentModel(initValues);
-    view = new ComponentView({ model: model, el: "." + control.id });
-  }
-  _c.controls = _c.controls || [];
-  _c.controls.push({ model: model, view: view });
-};
-
-_.extend(_c, Backbone.Events);
-
-if(isBrowser) {
-  jQuery.when(parseDom(), load()).done(parseApp);
-}
-
-}).call(this);
-},{"Backbone":3,"underscore":1,"rivets":4}],4:[function(require,module,exports){
-// Rivets.js
-// version: 0.5.5
-// author: Michael Richards
-// license: MIT
-(function() {
-  var Rivets,
-    __bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; },
-    __slice = [].slice,
-    __indexOf = [].indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; };
-
-  Rivets = {};
-
-  if (!String.prototype.trim) {
-    String.prototype.trim = function() {
-      return this.replace(/^\s+|\s+$/g, '');
-    };
-  }
-
-  Rivets.Binding = (function() {
-    function Binding(view, el, type, key, keypath, options) {
-      var identifier, regexp, value, _ref;
-
-      this.view = view;
-      this.el = el;
-      this.type = type;
-      this.key = key;
-      this.keypath = keypath;
-      this.options = options != null ? options : {};
-      this.update = __bind(this.update, this);
-      this.unbind = __bind(this.unbind, this);
-      this.bind = __bind(this.bind, this);
-      this.publish = __bind(this.publish, this);
-      this.sync = __bind(this.sync, this);
-      this.set = __bind(this.set, this);
-      this.eventHandler = __bind(this.eventHandler, this);
-      this.formattedValue = __bind(this.formattedValue, this);
-      if (!(this.binder = this.view.binders[type])) {
-        _ref = this.view.binders;
-        for (identifier in _ref) {
-          value = _ref[identifier];
-          if (identifier !== '*' && identifier.indexOf('*') !== -1) {
-            regexp = new RegExp("^" + (identifier.replace('*', '.+')) + "$");
-            if (regexp.test(type)) {
-              this.binder = value;
-              this.args = new RegExp("^" + (identifier.replace('*', '(.+)')) + "$").exec(type);
-              this.args.shift();
-            }
-          }
-        }
-      }
-      this.binder || (this.binder = this.view.binders['*']);
-      if (this.binder instanceof Function) {
-        this.binder = {
-          routine: this.binder
-        };
-      }
-      this.formatters = this.options.formatters || [];
-      this.model = this.key ? this.view.models[this.key] : this.view.models;
-    }
-
-    Binding.prototype.formattedValue = function(value) {
-      var args, formatter, id, _i, _len, _ref;
-
-      _ref = this.formatters;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        formatter = _ref[_i];
-        args = formatter.split(/\s+/);
-        id = args.shift();
-        formatter = this.model[id] instanceof Function ? this.model[id] : this.view.formatters[id];
-        if ((formatter != null ? formatter.read : void 0) instanceof Function) {
-          value = formatter.read.apply(formatter, [value].concat(__slice.call(args)));
-        } else if (formatter instanceof Function) {
-          value = formatter.apply(null, [value].concat(__slice.call(args)));
-        }
-      }
-      return value;
-    };
-
-    Binding.prototype.eventHandler = function(fn) {
-      var binding, handler;
-
-      handler = (binding = this).view.config.handler;
-      return function(ev) {
-        return handler.call(fn, this, ev, binding);
-      };
-    };
-
-    Binding.prototype.set = function(value) {
-      var _ref;
-
-      value = value instanceof Function && !this.binder["function"] ? this.formattedValue(value.call(this.model)) : this.formattedValue(value);
-      return (_ref = this.binder.routine) != null ? _ref.call(this, this.el, value) : void 0;
-    };
-
-    Binding.prototype.sync = function() {
-      return this.set(this.options.bypass ? this.model[this.keypath] : this.view.config.adapter.read(this.model, this.keypath));
-    };
-
-    Binding.prototype.publish = function() {
-      var args, formatter, id, value, _i, _len, _ref, _ref1, _ref2;
-
-      value = Rivets.Util.getInputValue(this.el);
-      _ref = this.formatters.slice(0).reverse();
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        formatter = _ref[_i];
-        args = formatter.split(/\s+/);
-        id = args.shift();
-        if ((_ref1 = this.view.formatters[id]) != null ? _ref1.publish : void 0) {
-          value = (_ref2 = this.view.formatters[id]).publish.apply(_ref2, [value].concat(__slice.call(args)));
-        }
-      }
-      return this.view.config.adapter.publish(this.model, this.keypath, value);
-    };
-
-    Binding.prototype.bind = function() {
-      var dependency, keypath, model, _i, _len, _ref, _ref1, _ref2, _results;
-
-      if ((_ref = this.binder.bind) != null) {
-        _ref.call(this, this.el);
-      }
-      if (this.options.bypass) {
-        this.sync();
-      } else {
-        this.view.config.adapter.subscribe(this.model, this.keypath, this.sync);
-        if (this.view.config.preloadData) {
-          this.sync();
-        }
-      }
-      if ((_ref1 = this.options.dependencies) != null ? _ref1.length : void 0) {
-        _ref2 = this.options.dependencies;
-        _results = [];
-        for (_i = 0, _len = _ref2.length; _i < _len; _i++) {
-          dependency = _ref2[_i];
-          if (/^\./.test(dependency)) {
-            model = this.model;
-            keypath = dependency.substr(1);
-          } else {
-            dependency = dependency.split('.');
-            model = this.view.models[dependency.shift()];
-            keypath = dependency.join('.');
-          }
-          _results.push(this.view.config.adapter.subscribe(model, keypath, this.sync));
-        }
-        return _results;
-      }
-    };
-
-    Binding.prototype.unbind = function() {
-      var dependency, keypath, model, _i, _len, _ref, _ref1, _ref2, _results;
-
-      if ((_ref = this.binder.unbind) != null) {
-        _ref.call(this, this.el);
-      }
-      if (!this.options.bypass) {
-        this.view.config.adapter.unsubscribe(this.model, this.keypath, this.sync);
-      }
-      if ((_ref1 = this.options.dependencies) != null ? _ref1.length : void 0) {
-        _ref2 = this.options.dependencies;
-        _results = [];
-        for (_i = 0, _len = _ref2.length; _i < _len; _i++) {
-          dependency = _ref2[_i];
-          if (/^\./.test(dependency)) {
-            model = this.model;
-            keypath = dependency.substr(1);
-          } else {
-            dependency = dependency.split('.');
-            model = this.view.models[dependency.shift()];
-            keypath = dependency.join('.');
-          }
-          _results.push(this.view.config.adapter.unsubscribe(model, keypath, this.sync));
-        }
-        return _results;
-      }
-    };
-
-    Binding.prototype.update = function() {
-      this.unbind();
-      this.model = this.key ? this.view.models[this.key] : this.view.models;
-      return this.bind();
-    };
-
-    return Binding;
-
-  })();
-
-  Rivets.View = (function() {
-    function View(els, models, options) {
-      var k, option, v, _base, _i, _len, _ref, _ref1, _ref2, _ref3;
-
-      this.els = els;
-      this.models = models;
-      this.options = options != null ? options : {};
-      this.update = __bind(this.update, this);
-      this.publish = __bind(this.publish, this);
-      this.sync = __bind(this.sync, this);
-      this.unbind = __bind(this.unbind, this);
-      this.bind = __bind(this.bind, this);
-      this.select = __bind(this.select, this);
-      this.build = __bind(this.build, this);
-      this.bindingRegExp = __bind(this.bindingRegExp, this);
-      if (!(this.els.jquery || this.els instanceof Array)) {
-        this.els = [this.els];
-      }
-      _ref = ['config', 'binders', 'formatters'];
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        option = _ref[_i];
-        this[option] = {};
-        if (this.options[option]) {
-          _ref1 = this.options[option];
-          for (k in _ref1) {
-            v = _ref1[k];
-            this[option][k] = v;
-          }
-        }
-        _ref2 = Rivets[option];
-        for (k in _ref2) {
-          v = _ref2[k];
-          if ((_ref3 = (_base = this[option])[k]) == null) {
-            _base[k] = v;
-          }
-        }
-      }
-      this.build();
-    }
-
-    View.prototype.bindingRegExp = function() {
-      var prefix;
-
-      prefix = this.config.prefix;
-      if (prefix) {
-        return new RegExp("^data-" + prefix + "-");
-      } else {
-        return /^data-/;
-      }
-    };
-
-    View.prototype.build = function() {
-      var bindingRegExp, el, node, parse, skipNodes, _i, _j, _len, _len1, _ref, _ref1,
-        _this = this;
-
-      this.bindings = [];
-      skipNodes = [];
-      bindingRegExp = this.bindingRegExp();
-      parse = function(node) {
-        var attribute, attributes, binder, context, ctx, dependencies, identifier, key, keypath, n, options, path, pipe, pipes, regexp, splitPath, type, value, _i, _j, _k, _len, _len1, _len2, _ref, _ref1, _ref2, _ref3;
-
-        if (__indexOf.call(skipNodes, node) < 0) {
-          _ref = node.attributes;
-          for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-            attribute = _ref[_i];
-            if (bindingRegExp.test(attribute.name)) {
-              type = attribute.name.replace(bindingRegExp, '');
-              if (!(binder = _this.binders[type])) {
-                _ref1 = _this.binders;
-                for (identifier in _ref1) {
-                  value = _ref1[identifier];
-                  if (identifier !== '*' && identifier.indexOf('*') !== -1) {
-                    regexp = new RegExp("^" + (identifier.replace('*', '.+')) + "$");
-                    if (regexp.test(type)) {
-                      binder = value;
-                    }
-                  }
-                }
-              }
-              binder || (binder = _this.binders['*']);
-              if (binder.block) {
-                _ref2 = node.getElementsByTagName('*');
-                for (_j = 0, _len1 = _ref2.length; _j < _len1; _j++) {
-                  n = _ref2[_j];
-                  skipNodes.push(n);
-                }
-                attributes = [attribute];
-              }
-            }
-          }
-          _ref3 = attributes || node.attributes;
-          for (_k = 0, _len2 = _ref3.length; _k < _len2; _k++) {
-            attribute = _ref3[_k];
-            if (bindingRegExp.test(attribute.name)) {
-              options = {};
-              type = attribute.name.replace(bindingRegExp, '');
-              pipes = (function() {
-                var _l, _len3, _ref4, _results;
-
-                _ref4 = attribute.value.split('|');
-                _results = [];
-                for (_l = 0, _len3 = _ref4.length; _l < _len3; _l++) {
-                  pipe = _ref4[_l];
-                  _results.push(pipe.trim());
-                }
-                return _results;
-              })();
-              context = (function() {
-                var _l, _len3, _ref4, _results;
-
-                _ref4 = pipes.shift().split('<');
-                _results = [];
-                for (_l = 0, _len3 = _ref4.length; _l < _len3; _l++) {
-                  ctx = _ref4[_l];
-                  _results.push(ctx.trim());
-                }
-                return _results;
-              })();
-              path = context.shift();
-              splitPath = path.split(/\.|:/);
-              options.formatters = pipes;
-              options.bypass = path.indexOf(':') !== -1;
-              if (splitPath[0]) {
-                key = splitPath.shift();
-              } else {
-                key = null;
-                splitPath.shift();
-              }
-              keypath = splitPath.join('.');
-              if (!key || (_this.models[key] != null)) {
-                if (dependencies = context.shift()) {
-                  options.dependencies = dependencies.split(/\s+/);
-                }
-                _this.bindings.push(new Rivets.Binding(_this, node, type, key, keypath, options));
-              }
-            }
-          }
-          if (attributes) {
-            attributes = null;
-          }
-        }
-      };
-      _ref = this.els;
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        el = _ref[_i];
-        parse(el);
-        _ref1 = el.getElementsByTagName('*');
-        for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
-          node = _ref1[_j];
-          if (node.attributes != null) {
-            parse(node);
-          }
-        }
-      }
-    };
-
-    View.prototype.select = function(fn) {
-      var binding, _i, _len, _ref, _results;
-
-      _ref = this.bindings;
-      _results = [];
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        binding = _ref[_i];
-        if (fn(binding)) {
-          _results.push(binding);
-        }
-      }
-      return _results;
-    };
-
-    View.prototype.bind = function() {
-      var binding, _i, _len, _ref, _results;
-
-      _ref = this.bindings;
-      _results = [];
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        binding = _ref[_i];
-        _results.push(binding.bind());
-      }
-      return _results;
-    };
-
-    View.prototype.unbind = function() {
-      var binding, _i, _len, _ref, _results;
-
-      _ref = this.bindings;
-      _results = [];
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        binding = _ref[_i];
-        _results.push(binding.unbind());
-      }
-      return _results;
-    };
-
-    View.prototype.sync = function() {
-      var binding, _i, _len, _ref, _results;
-
-      _ref = this.bindings;
-      _results = [];
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        binding = _ref[_i];
-        _results.push(binding.sync());
-      }
-      return _results;
-    };
-
-    View.prototype.publish = function() {
-      var binding, _i, _len, _ref, _results;
-
-      _ref = this.select(function(b) {
-        return b.binder.publishes;
-      });
-      _results = [];
-      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-        binding = _ref[_i];
-        _results.push(binding.publish());
-      }
-      return _results;
-    };
-
-    View.prototype.update = function(models) {
-      var binding, key, model, _results;
-
-      if (models == null) {
-        models = {};
-      }
-      _results = [];
-      for (key in models) {
-        model = models[key];
-        this.models[key] = model;
-        _results.push((function() {
-          var _i, _len, _ref, _results1;
-
-          _ref = this.select(function(b) {
-            return b.key === key;
-          });
-          _results1 = [];
-          for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-            binding = _ref[_i];
-            _results1.push(binding.update());
-          }
-          return _results1;
-        }).call(this));
-      }
-      return _results;
-    };
-
-    return View;
-
-  })();
-
-  Rivets.Util = {
-    bindEvent: function(el, event, handler) {
-      if (window.jQuery != null) {
-        el = jQuery(el);
-        if (el.on != null) {
-          return el.on(event, handler);
-        } else {
-          return el.bind(event, handler);
-        }
-      } else if (window.addEventListener != null) {
-        return el.addEventListener(event, handler, false);
-      } else {
-        event = 'on' + event;
-        return el.attachEvent(event, handler);
-      }
-    },
-    unbindEvent: function(el, event, handler) {
-      if (window.jQuery != null) {
-        el = jQuery(el);
-        if (el.off != null) {
-          return el.off(event, handler);
-        } else {
-          return el.unbind(event, handler);
-        }
-      } else if (window.removeEventListener != null) {
-        return el.removeEventListener(event, handler, false);
-      } else {
-        event = 'on' + event;
-        return el.detachEvent(event, handler);
-      }
-    },
-    getInputValue: function(el) {
-      var o, _i, _len, _results;
-
-      if (window.jQuery != null) {
-        el = jQuery(el);
-        switch (el[0].type) {
-          case 'checkbox':
-            return el.is(':checked');
-          default:
-            return el.val();
-        }
-      } else {
-        switch (el.type) {
-          case 'checkbox':
-            return el.checked;
-          case 'select-multiple':
-            _results = [];
-            for (_i = 0, _len = el.length; _i < _len; _i++) {
-              o = el[_i];
-              if (o.selected) {
-                _results.push(o.value);
-              }
-            }
-            return _results;
-            break;
-          default:
-            return el.value;
-        }
-      }
-    }
-  };
-
-  Rivets.binders = {
-    enabled: function(el, value) {
-      return el.disabled = !value;
-    },
-    disabled: function(el, value) {
-      return el.disabled = !!value;
-    },
-    checked: {
-      publishes: true,
-      bind: function(el) {
-        return Rivets.Util.bindEvent(el, 'change', this.publish);
-      },
-      unbind: function(el) {
-        return Rivets.Util.unbindEvent(el, 'change', this.publish);
-      },
-      routine: function(el, value) {
-        var _ref;
-
-        if (el.type === 'radio') {
-          return el.checked = ((_ref = el.value) != null ? _ref.toString() : void 0) === (value != null ? value.toString() : void 0);
-        } else {
-          return el.checked = !!value;
-        }
-      }
-    },
-    unchecked: {
-      publishes: true,
-      bind: function(el) {
-        return Rivets.Util.bindEvent(el, 'change', this.publish);
-      },
-      unbind: function(el) {
-        return Rivets.Util.unbindEvent(el, 'change', this.publish);
-      },
-      routine: function(el, value) {
-        var _ref;
-
-        if (el.type === 'radio') {
-          return el.checked = ((_ref = el.value) != null ? _ref.toString() : void 0) !== (value != null ? value.toString() : void 0);
-        } else {
-          return el.checked = !value;
-        }
-      }
-    },
-    show: function(el, value) {
-      return el.style.display = value ? '' : 'none';
-    },
-    hide: function(el, value) {
-      return el.style.display = value ? 'none' : '';
-    },
-    html: function(el, value) {
-      return el.innerHTML = value != null ? value : '';
-    },
-    value: {
-      publishes: true,
-      bind: function(el) {
-        return Rivets.Util.bindEvent(el, 'change', this.publish);
-      },
-      unbind: function(el) {
-        return Rivets.Util.unbindEvent(el, 'change', this.publish);
-      },
-      routine: function(el, value) {
-        var o, _i, _len, _ref, _ref1, _ref2, _results;
-
-        if (window.jQuery != null) {
-          el = jQuery(el);
-          if ((value != null ? value.toString() : void 0) !== ((_ref = el.val()) != null ? _ref.toString() : void 0)) {
-            return el.val(value != null ? value : '');
-          }
-        } else {
-          if (el.type === 'select-multiple') {
-            if (value != null) {
-              _results = [];
-              for (_i = 0, _len = el.length; _i < _len; _i++) {
-                o = el[_i];
-                _results.push(o.selected = (_ref1 = o.value, __indexOf.call(value, _ref1) >= 0));
-              }
-              return _results;
-            }
-          } else if ((value != null ? value.toString() : void 0) !== ((_ref2 = el.value) != null ? _ref2.toString() : void 0)) {
-            return el.value = value != null ? value : '';
-          }
-        }
-      }
-    },
-    text: function(el, value) {
-      if (el.innerText != null) {
-        return el.innerText = value != null ? value : '';
-      } else {
-        return el.textContent = value != null ? value : '';
-      }
-    },
-    "on-*": {
-      "function": true,
-      unbind: function(el) {
-        if (this.handler) {
-          return Rivets.Util.unbindEvent(el, this.args[0], this.handler);
-        }
-      },
-      routine: function(el, value) {
-        if (this.handler) {
-          Rivets.Util.unbindEvent(el, this.args[0], this.handler);
-        }
-        return Rivets.Util.bindEvent(el, this.args[0], this.handler = this.eventHandler(value));
-      }
-    },
-    "each-*": {
-      block: true,
-      bind: function(el) {
-        var attr;
-
-        if (this.marker == null) {
-          attr = ['data', this.view.config.prefix, this.type].join('-').replace('--', '-');
-          this.marker = document.createComment(" rivets: " + this.type + " ");
-          this.iterated = [];
-          el.removeAttribute(attr);
-          el.parentNode.insertBefore(this.marker, el);
-          return el.parentNode.removeChild(el);
-        }
-      },
-      unbind: function(el) {
-        var view, _i, _len, _ref, _results;
-
-        if (this.iterated != null) {
-          _ref = this.iterated;
-          _results = [];
-          for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-            view = _ref[_i];
-            _results.push(view.unbind());
-          }
-          return _results;
-        }
-      },
-      routine: function(el, collection) {
-        var data, i, index, k, key, model, modelName, options, previous, template, v, view, _i, _j, _len, _len1, _ref, _ref1, _ref2, _ref3, _results;
-
-        modelName = this.args[0];
-        collection = collection || [];
-        if (this.iterated.length > collection.length) {
-          _ref = Array(this.iterated.length - collection.length);
-          for (_i = 0, _len = _ref.length; _i < _len; _i++) {
-            i = _ref[_i];
-            view = this.iterated.pop();
-            view.unbind();
-            this.marker.parentNode.removeChild(view.els[0]);
-          }
-        }
-        _results = [];
-        for (index = _j = 0, _len1 = collection.length; _j < _len1; index = ++_j) {
-          model = collection[index];
-          data = {};
-          data[modelName] = model;
-          if (this.iterated[index] == null) {
-            _ref1 = this.view.models;
-            for (key in _ref1) {
-              model = _ref1[key];
-              if ((_ref2 = data[key]) == null) {
-                data[key] = model;
-              }
-            }
-            previous = this.iterated.length ? this.iterated[this.iterated.length - 1].els[0] : this.marker;
-            options = {
-              binders: this.view.options.binders,
-              formatters: this.view.options.formatters,
-              config: {}
-            };
-            _ref3 = this.view.options.config;
-            for (k in _ref3) {
-              v = _ref3[k];
-              options.config[k] = v;
-            }
-            options.config.preloadData = true;
-            template = el.cloneNode(true);
-            view = new Rivets.View(template, data, options);
-            view.bind();
-            this.iterated.push(view);
-            _results.push(this.marker.parentNode.insertBefore(template, previous.nextSibling));
-          } else if (this.iterated[index].models[modelName] !== model) {
-            _results.push(this.iterated[index].update(data));
-          } else {
-            _results.push(void 0);
-          }
-        }
-        return _results;
-      }
-    },
-    "class-*": function(el, value) {
-      var elClass;
-
-      elClass = " " + el.className + " ";
-      if (!value === (elClass.indexOf(" " + this.args[0] + " ") !== -1)) {
-        return el.className = value ? "" + el.className + " " + this.args[0] : elClass.replace(" " + this.args[0] + " ", ' ').trim();
-      }
-    },
-    "*": function(el, value) {
-      if (value) {
-        return el.setAttribute(this.type, value);
-      } else {
-        return el.removeAttribute(this.type);
-      }
-    }
-  };
-
-  Rivets.config = {
-    preloadData: true,
-    handler: function(context, ev, binding) {
-      return this.call(context, ev, binding.view.models);
-    }
-  };
-
-  Rivets.formatters = {};
-
-  Rivets.factory = function(exports) {
-    exports.binders = Rivets.binders;
-    exports.formatters = Rivets.formatters;
-    exports.config = Rivets.config;
-    exports.configure = function(options) {
-      var property, value;
-
-      if (options == null) {
-        options = {};
-      }
-      for (property in options) {
-        value = options[property];
-        Rivets.config[property] = value;
-      }
-    };
-    return exports.bind = function(el, models, options) {
-      var view;
-
-      if (models == null) {
-        models = {};
-      }
-      if (options == null) {
-        options = {};
-      }
-      view = new Rivets.View(el, models, options);
-      view.bind();
-      return view;
-    };
-  };
-
-  if (typeof exports === 'object') {
-    Rivets.factory(exports);
-  } else if (typeof define === 'function' && define.amd) {
-    define(['exports'], function(exports) {
-      Rivets.factory(this.rivets = exports);
-      return exports;
-    });
-  } else {
-    Rivets.factory(this.rivets = {});
-  }
-
-}).call(this);
-
-},{}],3:[function(require,module,exports){
 (function(){//     Backbone.js 1.0.0
 
 //     (c) 2010-2013 Jeremy Ashkenas, DocumentCloud Inc.
@@ -3908,5 +3839,1234 @@ if(isBrowser) {
 }).call(this);
 
 })()
-},{"underscore":1}]},{},[2])
+},{"underscore":5}],5:[function(require,module,exports){
+(function(){//     Underscore.js 1.4.4
+//     http://underscorejs.org
+//     (c) 2009-2013 Jeremy Ashkenas, DocumentCloud Inc.
+//     Underscore may be freely distributed under the MIT license.
+
+(function() {
+
+  // Baseline setup
+  // --------------
+
+  // Establish the root object, `window` in the browser, or `global` on the server.
+  var root = this;
+
+  // Save the previous value of the `_` variable.
+  var previousUnderscore = root._;
+
+  // Establish the object that gets returned to break out of a loop iteration.
+  var breaker = {};
+
+  // Save bytes in the minified (but not gzipped) version:
+  var ArrayProto = Array.prototype, ObjProto = Object.prototype, FuncProto = Function.prototype;
+
+  // Create quick reference variables for speed access to core prototypes.
+  var push             = ArrayProto.push,
+      slice            = ArrayProto.slice,
+      concat           = ArrayProto.concat,
+      toString         = ObjProto.toString,
+      hasOwnProperty   = ObjProto.hasOwnProperty;
+
+  // All **ECMAScript 5** native function implementations that we hope to use
+  // are declared here.
+  var
+    nativeForEach      = ArrayProto.forEach,
+    nativeMap          = ArrayProto.map,
+    nativeReduce       = ArrayProto.reduce,
+    nativeReduceRight  = ArrayProto.reduceRight,
+    nativeFilter       = ArrayProto.filter,
+    nativeEvery        = ArrayProto.every,
+    nativeSome         = ArrayProto.some,
+    nativeIndexOf      = ArrayProto.indexOf,
+    nativeLastIndexOf  = ArrayProto.lastIndexOf,
+    nativeIsArray      = Array.isArray,
+    nativeKeys         = Object.keys,
+    nativeBind         = FuncProto.bind;
+
+  // Create a safe reference to the Underscore object for use below.
+  var _ = function(obj) {
+    if (obj instanceof _) return obj;
+    if (!(this instanceof _)) return new _(obj);
+    this._wrapped = obj;
+  };
+
+  // Export the Underscore object for **Node.js**, with
+  // backwards-compatibility for the old `require()` API. If we're in
+  // the browser, add `_` as a global object via a string identifier,
+  // for Closure Compiler "advanced" mode.
+  if (typeof exports !== 'undefined') {
+    if (typeof module !== 'undefined' && module.exports) {
+      exports = module.exports = _;
+    }
+    exports._ = _;
+  } else {
+    root._ = _;
+  }
+
+  // Current version.
+  _.VERSION = '1.4.4';
+
+  // Collection Functions
+  // --------------------
+
+  // The cornerstone, an `each` implementation, aka `forEach`.
+  // Handles objects with the built-in `forEach`, arrays, and raw objects.
+  // Delegates to **ECMAScript 5**'s native `forEach` if available.
+  var each = _.each = _.forEach = function(obj, iterator, context) {
+    if (obj == null) return;
+    if (nativeForEach && obj.forEach === nativeForEach) {
+      obj.forEach(iterator, context);
+    } else if (obj.length === +obj.length) {
+      for (var i = 0, l = obj.length; i < l; i++) {
+        if (iterator.call(context, obj[i], i, obj) === breaker) return;
+      }
+    } else {
+      for (var key in obj) {
+        if (_.has(obj, key)) {
+          if (iterator.call(context, obj[key], key, obj) === breaker) return;
+        }
+      }
+    }
+  };
+
+  // Return the results of applying the iterator to each element.
+  // Delegates to **ECMAScript 5**'s native `map` if available.
+  _.map = _.collect = function(obj, iterator, context) {
+    var results = [];
+    if (obj == null) return results;
+    if (nativeMap && obj.map === nativeMap) return obj.map(iterator, context);
+    each(obj, function(value, index, list) {
+      results[results.length] = iterator.call(context, value, index, list);
+    });
+    return results;
+  };
+
+  var reduceError = 'Reduce of empty array with no initial value';
+
+  // **Reduce** builds up a single result from a list of values, aka `inject`,
+  // or `foldl`. Delegates to **ECMAScript 5**'s native `reduce` if available.
+  _.reduce = _.foldl = _.inject = function(obj, iterator, memo, context) {
+    var initial = arguments.length > 2;
+    if (obj == null) obj = [];
+    if (nativeReduce && obj.reduce === nativeReduce) {
+      if (context) iterator = _.bind(iterator, context);
+      return initial ? obj.reduce(iterator, memo) : obj.reduce(iterator);
+    }
+    each(obj, function(value, index, list) {
+      if (!initial) {
+        memo = value;
+        initial = true;
+      } else {
+        memo = iterator.call(context, memo, value, index, list);
+      }
+    });
+    if (!initial) throw new TypeError(reduceError);
+    return memo;
+  };
+
+  // The right-associative version of reduce, also known as `foldr`.
+  // Delegates to **ECMAScript 5**'s native `reduceRight` if available.
+  _.reduceRight = _.foldr = function(obj, iterator, memo, context) {
+    var initial = arguments.length > 2;
+    if (obj == null) obj = [];
+    if (nativeReduceRight && obj.reduceRight === nativeReduceRight) {
+      if (context) iterator = _.bind(iterator, context);
+      return initial ? obj.reduceRight(iterator, memo) : obj.reduceRight(iterator);
+    }
+    var length = obj.length;
+    if (length !== +length) {
+      var keys = _.keys(obj);
+      length = keys.length;
+    }
+    each(obj, function(value, index, list) {
+      index = keys ? keys[--length] : --length;
+      if (!initial) {
+        memo = obj[index];
+        initial = true;
+      } else {
+        memo = iterator.call(context, memo, obj[index], index, list);
+      }
+    });
+    if (!initial) throw new TypeError(reduceError);
+    return memo;
+  };
+
+  // Return the first value which passes a truth test. Aliased as `detect`.
+  _.find = _.detect = function(obj, iterator, context) {
+    var result;
+    any(obj, function(value, index, list) {
+      if (iterator.call(context, value, index, list)) {
+        result = value;
+        return true;
+      }
+    });
+    return result;
+  };
+
+  // Return all the elements that pass a truth test.
+  // Delegates to **ECMAScript 5**'s native `filter` if available.
+  // Aliased as `select`.
+  _.filter = _.select = function(obj, iterator, context) {
+    var results = [];
+    if (obj == null) return results;
+    if (nativeFilter && obj.filter === nativeFilter) return obj.filter(iterator, context);
+    each(obj, function(value, index, list) {
+      if (iterator.call(context, value, index, list)) results[results.length] = value;
+    });
+    return results;
+  };
+
+  // Return all the elements for which a truth test fails.
+  _.reject = function(obj, iterator, context) {
+    return _.filter(obj, function(value, index, list) {
+      return !iterator.call(context, value, index, list);
+    }, context);
+  };
+
+  // Determine whether all of the elements match a truth test.
+  // Delegates to **ECMAScript 5**'s native `every` if available.
+  // Aliased as `all`.
+  _.every = _.all = function(obj, iterator, context) {
+    iterator || (iterator = _.identity);
+    var result = true;
+    if (obj == null) return result;
+    if (nativeEvery && obj.every === nativeEvery) return obj.every(iterator, context);
+    each(obj, function(value, index, list) {
+      if (!(result = result && iterator.call(context, value, index, list))) return breaker;
+    });
+    return !!result;
+  };
+
+  // Determine if at least one element in the object matches a truth test.
+  // Delegates to **ECMAScript 5**'s native `some` if available.
+  // Aliased as `any`.
+  var any = _.some = _.any = function(obj, iterator, context) {
+    iterator || (iterator = _.identity);
+    var result = false;
+    if (obj == null) return result;
+    if (nativeSome && obj.some === nativeSome) return obj.some(iterator, context);
+    each(obj, function(value, index, list) {
+      if (result || (result = iterator.call(context, value, index, list))) return breaker;
+    });
+    return !!result;
+  };
+
+  // Determine if the array or object contains a given value (using `===`).
+  // Aliased as `include`.
+  _.contains = _.include = function(obj, target) {
+    if (obj == null) return false;
+    if (nativeIndexOf && obj.indexOf === nativeIndexOf) return obj.indexOf(target) != -1;
+    return any(obj, function(value) {
+      return value === target;
+    });
+  };
+
+  // Invoke a method (with arguments) on every item in a collection.
+  _.invoke = function(obj, method) {
+    var args = slice.call(arguments, 2);
+    var isFunc = _.isFunction(method);
+    return _.map(obj, function(value) {
+      return (isFunc ? method : value[method]).apply(value, args);
+    });
+  };
+
+  // Convenience version of a common use case of `map`: fetching a property.
+  _.pluck = function(obj, key) {
+    return _.map(obj, function(value){ return value[key]; });
+  };
+
+  // Convenience version of a common use case of `filter`: selecting only objects
+  // containing specific `key:value` pairs.
+  _.where = function(obj, attrs, first) {
+    if (_.isEmpty(attrs)) return first ? null : [];
+    return _[first ? 'find' : 'filter'](obj, function(value) {
+      for (var key in attrs) {
+        if (attrs[key] !== value[key]) return false;
+      }
+      return true;
+    });
+  };
+
+  // Convenience version of a common use case of `find`: getting the first object
+  // containing specific `key:value` pairs.
+  _.findWhere = function(obj, attrs) {
+    return _.where(obj, attrs, true);
+  };
+
+  // Return the maximum element or (element-based computation).
+  // Can't optimize arrays of integers longer than 65,535 elements.
+  // See: https://bugs.webkit.org/show_bug.cgi?id=80797
+  _.max = function(obj, iterator, context) {
+    if (!iterator && _.isArray(obj) && obj[0] === +obj[0] && obj.length < 65535) {
+      return Math.max.apply(Math, obj);
+    }
+    if (!iterator && _.isEmpty(obj)) return -Infinity;
+    var result = {computed : -Infinity, value: -Infinity};
+    each(obj, function(value, index, list) {
+      var computed = iterator ? iterator.call(context, value, index, list) : value;
+      computed >= result.computed && (result = {value : value, computed : computed});
+    });
+    return result.value;
+  };
+
+  // Return the minimum element (or element-based computation).
+  _.min = function(obj, iterator, context) {
+    if (!iterator && _.isArray(obj) && obj[0] === +obj[0] && obj.length < 65535) {
+      return Math.min.apply(Math, obj);
+    }
+    if (!iterator && _.isEmpty(obj)) return Infinity;
+    var result = {computed : Infinity, value: Infinity};
+    each(obj, function(value, index, list) {
+      var computed = iterator ? iterator.call(context, value, index, list) : value;
+      computed < result.computed && (result = {value : value, computed : computed});
+    });
+    return result.value;
+  };
+
+  // Shuffle an array.
+  _.shuffle = function(obj) {
+    var rand;
+    var index = 0;
+    var shuffled = [];
+    each(obj, function(value) {
+      rand = _.random(index++);
+      shuffled[index - 1] = shuffled[rand];
+      shuffled[rand] = value;
+    });
+    return shuffled;
+  };
+
+  // An internal function to generate lookup iterators.
+  var lookupIterator = function(value) {
+    return _.isFunction(value) ? value : function(obj){ return obj[value]; };
+  };
+
+  // Sort the object's values by a criterion produced by an iterator.
+  _.sortBy = function(obj, value, context) {
+    var iterator = lookupIterator(value);
+    return _.pluck(_.map(obj, function(value, index, list) {
+      return {
+        value : value,
+        index : index,
+        criteria : iterator.call(context, value, index, list)
+      };
+    }).sort(function(left, right) {
+      var a = left.criteria;
+      var b = right.criteria;
+      if (a !== b) {
+        if (a > b || a === void 0) return 1;
+        if (a < b || b === void 0) return -1;
+      }
+      return left.index < right.index ? -1 : 1;
+    }), 'value');
+  };
+
+  // An internal function used for aggregate "group by" operations.
+  var group = function(obj, value, context, behavior) {
+    var result = {};
+    var iterator = lookupIterator(value || _.identity);
+    each(obj, function(value, index) {
+      var key = iterator.call(context, value, index, obj);
+      behavior(result, key, value);
+    });
+    return result;
+  };
+
+  // Groups the object's values by a criterion. Pass either a string attribute
+  // to group by, or a function that returns the criterion.
+  _.groupBy = function(obj, value, context) {
+    return group(obj, value, context, function(result, key, value) {
+      (_.has(result, key) ? result[key] : (result[key] = [])).push(value);
+    });
+  };
+
+  // Counts instances of an object that group by a certain criterion. Pass
+  // either a string attribute to count by, or a function that returns the
+  // criterion.
+  _.countBy = function(obj, value, context) {
+    return group(obj, value, context, function(result, key) {
+      if (!_.has(result, key)) result[key] = 0;
+      result[key]++;
+    });
+  };
+
+  // Use a comparator function to figure out the smallest index at which
+  // an object should be inserted so as to maintain order. Uses binary search.
+  _.sortedIndex = function(array, obj, iterator, context) {
+    iterator = iterator == null ? _.identity : lookupIterator(iterator);
+    var value = iterator.call(context, obj);
+    var low = 0, high = array.length;
+    while (low < high) {
+      var mid = (low + high) >>> 1;
+      iterator.call(context, array[mid]) < value ? low = mid + 1 : high = mid;
+    }
+    return low;
+  };
+
+  // Safely convert anything iterable into a real, live array.
+  _.toArray = function(obj) {
+    if (!obj) return [];
+    if (_.isArray(obj)) return slice.call(obj);
+    if (obj.length === +obj.length) return _.map(obj, _.identity);
+    return _.values(obj);
+  };
+
+  // Return the number of elements in an object.
+  _.size = function(obj) {
+    if (obj == null) return 0;
+    return (obj.length === +obj.length) ? obj.length : _.keys(obj).length;
+  };
+
+  // Array Functions
+  // ---------------
+
+  // Get the first element of an array. Passing **n** will return the first N
+  // values in the array. Aliased as `head` and `take`. The **guard** check
+  // allows it to work with `_.map`.
+  _.first = _.head = _.take = function(array, n, guard) {
+    if (array == null) return void 0;
+    return (n != null) && !guard ? slice.call(array, 0, n) : array[0];
+  };
+
+  // Returns everything but the last entry of the array. Especially useful on
+  // the arguments object. Passing **n** will return all the values in
+  // the array, excluding the last N. The **guard** check allows it to work with
+  // `_.map`.
+  _.initial = function(array, n, guard) {
+    return slice.call(array, 0, array.length - ((n == null) || guard ? 1 : n));
+  };
+
+  // Get the last element of an array. Passing **n** will return the last N
+  // values in the array. The **guard** check allows it to work with `_.map`.
+  _.last = function(array, n, guard) {
+    if (array == null) return void 0;
+    if ((n != null) && !guard) {
+      return slice.call(array, Math.max(array.length - n, 0));
+    } else {
+      return array[array.length - 1];
+    }
+  };
+
+  // Returns everything but the first entry of the array. Aliased as `tail` and `drop`.
+  // Especially useful on the arguments object. Passing an **n** will return
+  // the rest N values in the array. The **guard**
+  // check allows it to work with `_.map`.
+  _.rest = _.tail = _.drop = function(array, n, guard) {
+    return slice.call(array, (n == null) || guard ? 1 : n);
+  };
+
+  // Trim out all falsy values from an array.
+  _.compact = function(array) {
+    return _.filter(array, _.identity);
+  };
+
+  // Internal implementation of a recursive `flatten` function.
+  var flatten = function(input, shallow, output) {
+    each(input, function(value) {
+      if (_.isArray(value)) {
+        shallow ? push.apply(output, value) : flatten(value, shallow, output);
+      } else {
+        output.push(value);
+      }
+    });
+    return output;
+  };
+
+  // Return a completely flattened version of an array.
+  _.flatten = function(array, shallow) {
+    return flatten(array, shallow, []);
+  };
+
+  // Return a version of the array that does not contain the specified value(s).
+  _.without = function(array) {
+    return _.difference(array, slice.call(arguments, 1));
+  };
+
+  // Produce a duplicate-free version of the array. If the array has already
+  // been sorted, you have the option of using a faster algorithm.
+  // Aliased as `unique`.
+  _.uniq = _.unique = function(array, isSorted, iterator, context) {
+    if (_.isFunction(isSorted)) {
+      context = iterator;
+      iterator = isSorted;
+      isSorted = false;
+    }
+    var initial = iterator ? _.map(array, iterator, context) : array;
+    var results = [];
+    var seen = [];
+    each(initial, function(value, index) {
+      if (isSorted ? (!index || seen[seen.length - 1] !== value) : !_.contains(seen, value)) {
+        seen.push(value);
+        results.push(array[index]);
+      }
+    });
+    return results;
+  };
+
+  // Produce an array that contains the union: each distinct element from all of
+  // the passed-in arrays.
+  _.union = function() {
+    return _.uniq(concat.apply(ArrayProto, arguments));
+  };
+
+  // Produce an array that contains every item shared between all the
+  // passed-in arrays.
+  _.intersection = function(array) {
+    var rest = slice.call(arguments, 1);
+    return _.filter(_.uniq(array), function(item) {
+      return _.every(rest, function(other) {
+        return _.indexOf(other, item) >= 0;
+      });
+    });
+  };
+
+  // Take the difference between one array and a number of other arrays.
+  // Only the elements present in just the first array will remain.
+  _.difference = function(array) {
+    var rest = concat.apply(ArrayProto, slice.call(arguments, 1));
+    return _.filter(array, function(value){ return !_.contains(rest, value); });
+  };
+
+  // Zip together multiple lists into a single array -- elements that share
+  // an index go together.
+  _.zip = function() {
+    var args = slice.call(arguments);
+    var length = _.max(_.pluck(args, 'length'));
+    var results = new Array(length);
+    for (var i = 0; i < length; i++) {
+      results[i] = _.pluck(args, "" + i);
+    }
+    return results;
+  };
+
+  // Converts lists into objects. Pass either a single array of `[key, value]`
+  // pairs, or two parallel arrays of the same length -- one of keys, and one of
+  // the corresponding values.
+  _.object = function(list, values) {
+    if (list == null) return {};
+    var result = {};
+    for (var i = 0, l = list.length; i < l; i++) {
+      if (values) {
+        result[list[i]] = values[i];
+      } else {
+        result[list[i][0]] = list[i][1];
+      }
+    }
+    return result;
+  };
+
+  // If the browser doesn't supply us with indexOf (I'm looking at you, **MSIE**),
+  // we need this function. Return the position of the first occurrence of an
+  // item in an array, or -1 if the item is not included in the array.
+  // Delegates to **ECMAScript 5**'s native `indexOf` if available.
+  // If the array is large and already in sort order, pass `true`
+  // for **isSorted** to use binary search.
+  _.indexOf = function(array, item, isSorted) {
+    if (array == null) return -1;
+    var i = 0, l = array.length;
+    if (isSorted) {
+      if (typeof isSorted == 'number') {
+        i = (isSorted < 0 ? Math.max(0, l + isSorted) : isSorted);
+      } else {
+        i = _.sortedIndex(array, item);
+        return array[i] === item ? i : -1;
+      }
+    }
+    if (nativeIndexOf && array.indexOf === nativeIndexOf) return array.indexOf(item, isSorted);
+    for (; i < l; i++) if (array[i] === item) return i;
+    return -1;
+  };
+
+  // Delegates to **ECMAScript 5**'s native `lastIndexOf` if available.
+  _.lastIndexOf = function(array, item, from) {
+    if (array == null) return -1;
+    var hasIndex = from != null;
+    if (nativeLastIndexOf && array.lastIndexOf === nativeLastIndexOf) {
+      return hasIndex ? array.lastIndexOf(item, from) : array.lastIndexOf(item);
+    }
+    var i = (hasIndex ? from : array.length);
+    while (i--) if (array[i] === item) return i;
+    return -1;
+  };
+
+  // Generate an integer Array containing an arithmetic progression. A port of
+  // the native Python `range()` function. See
+  // [the Python documentation](http://docs.python.org/library/functions.html#range).
+  _.range = function(start, stop, step) {
+    if (arguments.length <= 1) {
+      stop = start || 0;
+      start = 0;
+    }
+    step = arguments[2] || 1;
+
+    var len = Math.max(Math.ceil((stop - start) / step), 0);
+    var idx = 0;
+    var range = new Array(len);
+
+    while(idx < len) {
+      range[idx++] = start;
+      start += step;
+    }
+
+    return range;
+  };
+
+  // Function (ahem) Functions
+  // ------------------
+
+  // Create a function bound to a given object (assigning `this`, and arguments,
+  // optionally). Delegates to **ECMAScript 5**'s native `Function.bind` if
+  // available.
+  _.bind = function(func, context) {
+    if (func.bind === nativeBind && nativeBind) return nativeBind.apply(func, slice.call(arguments, 1));
+    var args = slice.call(arguments, 2);
+    return function() {
+      return func.apply(context, args.concat(slice.call(arguments)));
+    };
+  };
+
+  // Partially apply a function by creating a version that has had some of its
+  // arguments pre-filled, without changing its dynamic `this` context.
+  _.partial = function(func) {
+    var args = slice.call(arguments, 1);
+    return function() {
+      return func.apply(this, args.concat(slice.call(arguments)));
+    };
+  };
+
+  // Bind all of an object's methods to that object. Useful for ensuring that
+  // all callbacks defined on an object belong to it.
+  _.bindAll = function(obj) {
+    var funcs = slice.call(arguments, 1);
+    if (funcs.length === 0) funcs = _.functions(obj);
+    each(funcs, function(f) { obj[f] = _.bind(obj[f], obj); });
+    return obj;
+  };
+
+  // Memoize an expensive function by storing its results.
+  _.memoize = function(func, hasher) {
+    var memo = {};
+    hasher || (hasher = _.identity);
+    return function() {
+      var key = hasher.apply(this, arguments);
+      return _.has(memo, key) ? memo[key] : (memo[key] = func.apply(this, arguments));
+    };
+  };
+
+  // Delays a function for the given number of milliseconds, and then calls
+  // it with the arguments supplied.
+  _.delay = function(func, wait) {
+    var args = slice.call(arguments, 2);
+    return setTimeout(function(){ return func.apply(null, args); }, wait);
+  };
+
+  // Defers a function, scheduling it to run after the current call stack has
+  // cleared.
+  _.defer = function(func) {
+    return _.delay.apply(_, [func, 1].concat(slice.call(arguments, 1)));
+  };
+
+  // Returns a function, that, when invoked, will only be triggered at most once
+  // during a given window of time.
+  _.throttle = function(func, wait) {
+    var context, args, timeout, result;
+    var previous = 0;
+    var later = function() {
+      previous = new Date;
+      timeout = null;
+      result = func.apply(context, args);
+    };
+    return function() {
+      var now = new Date;
+      var remaining = wait - (now - previous);
+      context = this;
+      args = arguments;
+      if (remaining <= 0) {
+        clearTimeout(timeout);
+        timeout = null;
+        previous = now;
+        result = func.apply(context, args);
+      } else if (!timeout) {
+        timeout = setTimeout(later, remaining);
+      }
+      return result;
+    };
+  };
+
+  // Returns a function, that, as long as it continues to be invoked, will not
+  // be triggered. The function will be called after it stops being called for
+  // N milliseconds. If `immediate` is passed, trigger the function on the
+  // leading edge, instead of the trailing.
+  _.debounce = function(func, wait, immediate) {
+    var timeout, result;
+    return function() {
+      var context = this, args = arguments;
+      var later = function() {
+        timeout = null;
+        if (!immediate) result = func.apply(context, args);
+      };
+      var callNow = immediate && !timeout;
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+      if (callNow) result = func.apply(context, args);
+      return result;
+    };
+  };
+
+  // Returns a function that will be executed at most one time, no matter how
+  // often you call it. Useful for lazy initialization.
+  _.once = function(func) {
+    var ran = false, memo;
+    return function() {
+      if (ran) return memo;
+      ran = true;
+      memo = func.apply(this, arguments);
+      func = null;
+      return memo;
+    };
+  };
+
+  // Returns the first function passed as an argument to the second,
+  // allowing you to adjust arguments, run code before and after, and
+  // conditionally execute the original function.
+  _.wrap = function(func, wrapper) {
+    return function() {
+      var args = [func];
+      push.apply(args, arguments);
+      return wrapper.apply(this, args);
+    };
+  };
+
+  // Returns a function that is the composition of a list of functions, each
+  // consuming the return value of the function that follows.
+  _.compose = function() {
+    var funcs = arguments;
+    return function() {
+      var args = arguments;
+      for (var i = funcs.length - 1; i >= 0; i--) {
+        args = [funcs[i].apply(this, args)];
+      }
+      return args[0];
+    };
+  };
+
+  // Returns a function that will only be executed after being called N times.
+  _.after = function(times, func) {
+    if (times <= 0) return func();
+    return function() {
+      if (--times < 1) {
+        return func.apply(this, arguments);
+      }
+    };
+  };
+
+  // Object Functions
+  // ----------------
+
+  // Retrieve the names of an object's properties.
+  // Delegates to **ECMAScript 5**'s native `Object.keys`
+  _.keys = nativeKeys || function(obj) {
+    if (obj !== Object(obj)) throw new TypeError('Invalid object');
+    var keys = [];
+    for (var key in obj) if (_.has(obj, key)) keys[keys.length] = key;
+    return keys;
+  };
+
+  // Retrieve the values of an object's properties.
+  _.values = function(obj) {
+    var values = [];
+    for (var key in obj) if (_.has(obj, key)) values.push(obj[key]);
+    return values;
+  };
+
+  // Convert an object into a list of `[key, value]` pairs.
+  _.pairs = function(obj) {
+    var pairs = [];
+    for (var key in obj) if (_.has(obj, key)) pairs.push([key, obj[key]]);
+    return pairs;
+  };
+
+  // Invert the keys and values of an object. The values must be serializable.
+  _.invert = function(obj) {
+    var result = {};
+    for (var key in obj) if (_.has(obj, key)) result[obj[key]] = key;
+    return result;
+  };
+
+  // Return a sorted list of the function names available on the object.
+  // Aliased as `methods`
+  _.functions = _.methods = function(obj) {
+    var names = [];
+    for (var key in obj) {
+      if (_.isFunction(obj[key])) names.push(key);
+    }
+    return names.sort();
+  };
+
+  // Extend a given object with all the properties in passed-in object(s).
+  _.extend = function(obj) {
+    each(slice.call(arguments, 1), function(source) {
+      if (source) {
+        for (var prop in source) {
+          obj[prop] = source[prop];
+        }
+      }
+    });
+    return obj;
+  };
+
+  // Return a copy of the object only containing the whitelisted properties.
+  _.pick = function(obj) {
+    var copy = {};
+    var keys = concat.apply(ArrayProto, slice.call(arguments, 1));
+    each(keys, function(key) {
+      if (key in obj) copy[key] = obj[key];
+    });
+    return copy;
+  };
+
+   // Return a copy of the object without the blacklisted properties.
+  _.omit = function(obj) {
+    var copy = {};
+    var keys = concat.apply(ArrayProto, slice.call(arguments, 1));
+    for (var key in obj) {
+      if (!_.contains(keys, key)) copy[key] = obj[key];
+    }
+    return copy;
+  };
+
+  // Fill in a given object with default properties.
+  _.defaults = function(obj) {
+    each(slice.call(arguments, 1), function(source) {
+      if (source) {
+        for (var prop in source) {
+          if (obj[prop] == null) obj[prop] = source[prop];
+        }
+      }
+    });
+    return obj;
+  };
+
+  // Create a (shallow-cloned) duplicate of an object.
+  _.clone = function(obj) {
+    if (!_.isObject(obj)) return obj;
+    return _.isArray(obj) ? obj.slice() : _.extend({}, obj);
+  };
+
+  // Invokes interceptor with the obj, and then returns obj.
+  // The primary purpose of this method is to "tap into" a method chain, in
+  // order to perform operations on intermediate results within the chain.
+  _.tap = function(obj, interceptor) {
+    interceptor(obj);
+    return obj;
+  };
+
+  // Internal recursive comparison function for `isEqual`.
+  var eq = function(a, b, aStack, bStack) {
+    // Identical objects are equal. `0 === -0`, but they aren't identical.
+    // See the Harmony `egal` proposal: http://wiki.ecmascript.org/doku.php?id=harmony:egal.
+    if (a === b) return a !== 0 || 1 / a == 1 / b;
+    // A strict comparison is necessary because `null == undefined`.
+    if (a == null || b == null) return a === b;
+    // Unwrap any wrapped objects.
+    if (a instanceof _) a = a._wrapped;
+    if (b instanceof _) b = b._wrapped;
+    // Compare `[[Class]]` names.
+    var className = toString.call(a);
+    if (className != toString.call(b)) return false;
+    switch (className) {
+      // Strings, numbers, dates, and booleans are compared by value.
+      case '[object String]':
+        // Primitives and their corresponding object wrappers are equivalent; thus, `"5"` is
+        // equivalent to `new String("5")`.
+        return a == String(b);
+      case '[object Number]':
+        // `NaN`s are equivalent, but non-reflexive. An `egal` comparison is performed for
+        // other numeric values.
+        return a != +a ? b != +b : (a == 0 ? 1 / a == 1 / b : a == +b);
+      case '[object Date]':
+      case '[object Boolean]':
+        // Coerce dates and booleans to numeric primitive values. Dates are compared by their
+        // millisecond representations. Note that invalid dates with millisecond representations
+        // of `NaN` are not equivalent.
+        return +a == +b;
+      // RegExps are compared by their source patterns and flags.
+      case '[object RegExp]':
+        return a.source == b.source &&
+               a.global == b.global &&
+               a.multiline == b.multiline &&
+               a.ignoreCase == b.ignoreCase;
+    }
+    if (typeof a != 'object' || typeof b != 'object') return false;
+    // Assume equality for cyclic structures. The algorithm for detecting cyclic
+    // structures is adapted from ES 5.1 section 15.12.3, abstract operation `JO`.
+    var length = aStack.length;
+    while (length--) {
+      // Linear search. Performance is inversely proportional to the number of
+      // unique nested structures.
+      if (aStack[length] == a) return bStack[length] == b;
+    }
+    // Add the first object to the stack of traversed objects.
+    aStack.push(a);
+    bStack.push(b);
+    var size = 0, result = true;
+    // Recursively compare objects and arrays.
+    if (className == '[object Array]') {
+      // Compare array lengths to determine if a deep comparison is necessary.
+      size = a.length;
+      result = size == b.length;
+      if (result) {
+        // Deep compare the contents, ignoring non-numeric properties.
+        while (size--) {
+          if (!(result = eq(a[size], b[size], aStack, bStack))) break;
+        }
+      }
+    } else {
+      // Objects with different constructors are not equivalent, but `Object`s
+      // from different frames are.
+      var aCtor = a.constructor, bCtor = b.constructor;
+      if (aCtor !== bCtor && !(_.isFunction(aCtor) && (aCtor instanceof aCtor) &&
+                               _.isFunction(bCtor) && (bCtor instanceof bCtor))) {
+        return false;
+      }
+      // Deep compare objects.
+      for (var key in a) {
+        if (_.has(a, key)) {
+          // Count the expected number of properties.
+          size++;
+          // Deep compare each member.
+          if (!(result = _.has(b, key) && eq(a[key], b[key], aStack, bStack))) break;
+        }
+      }
+      // Ensure that both objects contain the same number of properties.
+      if (result) {
+        for (key in b) {
+          if (_.has(b, key) && !(size--)) break;
+        }
+        result = !size;
+      }
+    }
+    // Remove the first object from the stack of traversed objects.
+    aStack.pop();
+    bStack.pop();
+    return result;
+  };
+
+  // Perform a deep comparison to check if two objects are equal.
+  _.isEqual = function(a, b) {
+    return eq(a, b, [], []);
+  };
+
+  // Is a given array, string, or object empty?
+  // An "empty" object has no enumerable own-properties.
+  _.isEmpty = function(obj) {
+    if (obj == null) return true;
+    if (_.isArray(obj) || _.isString(obj)) return obj.length === 0;
+    for (var key in obj) if (_.has(obj, key)) return false;
+    return true;
+  };
+
+  // Is a given value a DOM element?
+  _.isElement = function(obj) {
+    return !!(obj && obj.nodeType === 1);
+  };
+
+  // Is a given value an array?
+  // Delegates to ECMA5's native Array.isArray
+  _.isArray = nativeIsArray || function(obj) {
+    return toString.call(obj) == '[object Array]';
+  };
+
+  // Is a given variable an object?
+  _.isObject = function(obj) {
+    return obj === Object(obj);
+  };
+
+  // Add some isType methods: isArguments, isFunction, isString, isNumber, isDate, isRegExp.
+  each(['Arguments', 'Function', 'String', 'Number', 'Date', 'RegExp'], function(name) {
+    _['is' + name] = function(obj) {
+      return toString.call(obj) == '[object ' + name + ']';
+    };
+  });
+
+  // Define a fallback version of the method in browsers (ahem, IE), where
+  // there isn't any inspectable "Arguments" type.
+  if (!_.isArguments(arguments)) {
+    _.isArguments = function(obj) {
+      return !!(obj && _.has(obj, 'callee'));
+    };
+  }
+
+  // Optimize `isFunction` if appropriate.
+  if (typeof (/./) !== 'function') {
+    _.isFunction = function(obj) {
+      return typeof obj === 'function';
+    };
+  }
+
+  // Is a given object a finite number?
+  _.isFinite = function(obj) {
+    return isFinite(obj) && !isNaN(parseFloat(obj));
+  };
+
+  // Is the given value `NaN`? (NaN is the only number which does not equal itself).
+  _.isNaN = function(obj) {
+    return _.isNumber(obj) && obj != +obj;
+  };
+
+  // Is a given value a boolean?
+  _.isBoolean = function(obj) {
+    return obj === true || obj === false || toString.call(obj) == '[object Boolean]';
+  };
+
+  // Is a given value equal to null?
+  _.isNull = function(obj) {
+    return obj === null;
+  };
+
+  // Is a given variable undefined?
+  _.isUndefined = function(obj) {
+    return obj === void 0;
+  };
+
+  // Shortcut function for checking if an object has a given property directly
+  // on itself (in other words, not on a prototype).
+  _.has = function(obj, key) {
+    return hasOwnProperty.call(obj, key);
+  };
+
+  // Utility Functions
+  // -----------------
+
+  // Run Underscore.js in *noConflict* mode, returning the `_` variable to its
+  // previous owner. Returns a reference to the Underscore object.
+  _.noConflict = function() {
+    root._ = previousUnderscore;
+    return this;
+  };
+
+  // Keep the identity function around for default iterators.
+  _.identity = function(value) {
+    return value;
+  };
+
+  // Run a function **n** times.
+  _.times = function(n, iterator, context) {
+    var accum = Array(n);
+    for (var i = 0; i < n; i++) accum[i] = iterator.call(context, i);
+    return accum;
+  };
+
+  // Return a random integer between min and max (inclusive).
+  _.random = function(min, max) {
+    if (max == null) {
+      max = min;
+      min = 0;
+    }
+    return min + Math.floor(Math.random() * (max - min + 1));
+  };
+
+  // List of HTML entities for escaping.
+  var entityMap = {
+    escape: {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#x27;',
+      '/': '&#x2F;'
+    }
+  };
+  entityMap.unescape = _.invert(entityMap.escape);
+
+  // Regexes containing the keys and values listed immediately above.
+  var entityRegexes = {
+    escape:   new RegExp('[' + _.keys(entityMap.escape).join('') + ']', 'g'),
+    unescape: new RegExp('(' + _.keys(entityMap.unescape).join('|') + ')', 'g')
+  };
+
+  // Functions for escaping and unescaping strings to/from HTML interpolation.
+  _.each(['escape', 'unescape'], function(method) {
+    _[method] = function(string) {
+      if (string == null) return '';
+      return ('' + string).replace(entityRegexes[method], function(match) {
+        return entityMap[method][match];
+      });
+    };
+  });
+
+  // If the value of the named property is a function then invoke it;
+  // otherwise, return it.
+  _.result = function(object, property) {
+    if (object == null) return null;
+    var value = object[property];
+    return _.isFunction(value) ? value.call(object) : value;
+  };
+
+  // Add your own custom functions to the Underscore object.
+  _.mixin = function(obj) {
+    each(_.functions(obj), function(name){
+      var func = _[name] = obj[name];
+      _.prototype[name] = function() {
+        var args = [this._wrapped];
+        push.apply(args, arguments);
+        return result.call(this, func.apply(_, args));
+      };
+    });
+  };
+
+  // Generate a unique integer id (unique within the entire client session).
+  // Useful for temporary DOM ids.
+  var idCounter = 0;
+  _.uniqueId = function(prefix) {
+    var id = ++idCounter + '';
+    return prefix ? prefix + id : id;
+  };
+
+  // By default, Underscore uses ERB-style template delimiters, change the
+  // following template settings to use alternative delimiters.
+  _.templateSettings = {
+    evaluate    : /<%([\s\S]+?)%>/g,
+    interpolate : /<%=([\s\S]+?)%>/g,
+    escape      : /<%-([\s\S]+?)%>/g
+  };
+
+  // When customizing `templateSettings`, if you don't want to define an
+  // interpolation, evaluation or escaping regex, we need one that is
+  // guaranteed not to match.
+  var noMatch = /(.)^/;
+
+  // Certain characters need to be escaped so that they can be put into a
+  // string literal.
+  var escapes = {
+    "'":      "'",
+    '\\':     '\\',
+    '\r':     'r',
+    '\n':     'n',
+    '\t':     't',
+    '\u2028': 'u2028',
+    '\u2029': 'u2029'
+  };
+
+  var escaper = /\\|'|\r|\n|\t|\u2028|\u2029/g;
+
+  // JavaScript micro-templating, similar to John Resig's implementation.
+  // Underscore templating handles arbitrary delimiters, preserves whitespace,
+  // and correctly escapes quotes within interpolated code.
+  _.template = function(text, data, settings) {
+    var render;
+    settings = _.defaults({}, settings, _.templateSettings);
+
+    // Combine delimiters into one regular expression via alternation.
+    var matcher = new RegExp([
+      (settings.escape || noMatch).source,
+      (settings.interpolate || noMatch).source,
+      (settings.evaluate || noMatch).source
+    ].join('|') + '|$', 'g');
+
+    // Compile the template source, escaping string literals appropriately.
+    var index = 0;
+    var source = "__p+='";
+    text.replace(matcher, function(match, escape, interpolate, evaluate, offset) {
+      source += text.slice(index, offset)
+        .replace(escaper, function(match) { return '\\' + escapes[match]; });
+
+      if (escape) {
+        source += "'+\n((__t=(" + escape + "))==null?'':_.escape(__t))+\n'";
+      }
+      if (interpolate) {
+        source += "'+\n((__t=(" + interpolate + "))==null?'':__t)+\n'";
+      }
+      if (evaluate) {
+        source += "';\n" + evaluate + "\n__p+='";
+      }
+      index = offset + match.length;
+      return match;
+    });
+    source += "';\n";
+
+    // If a variable is not specified, place data values in local scope.
+    if (!settings.variable) source = 'with(obj||{}){\n' + source + '}\n';
+
+    source = "var __t,__p='',__j=Array.prototype.join," +
+      "print=function(){__p+=__j.call(arguments,'');};\n" +
+      source + "return __p;\n";
+
+    try {
+      render = new Function(settings.variable || 'obj', '_', source);
+    } catch (e) {
+      e.source = source;
+      throw e;
+    }
+
+    if (data) return render(data, _);
+    var template = function(data) {
+      return render.call(this, data, _);
+    };
+
+    // Provide the compiled function source as a convenience for precompilation.
+    template.source = 'function(' + (settings.variable || 'obj') + '){\n' + source + '}';
+
+    return template;
+  };
+
+  // Add a "chain" function, which will delegate to the wrapper.
+  _.chain = function(obj) {
+    return _(obj).chain();
+  };
+
+  // OOP
+  // ---------------
+  // If Underscore is called as a function, it returns a wrapped object that
+  // can be used OO-style. This wrapper holds altered versions of all the
+  // underscore functions. Wrapped objects may be chained.
+
+  // Helper function to continue chaining intermediate results.
+  var result = function(obj) {
+    return this._chain ? _(obj).chain() : obj;
+  };
+
+  // Add all of the Underscore functions to the wrapper object.
+  _.mixin(_);
+
+  // Add all mutator Array functions to the wrapper.
+  each(['pop', 'push', 'reverse', 'shift', 'sort', 'splice', 'unshift'], function(name) {
+    var method = ArrayProto[name];
+    _.prototype[name] = function() {
+      var obj = this._wrapped;
+      method.apply(obj, arguments);
+      if ((name == 'shift' || name == 'splice') && obj.length === 0) delete obj[0];
+      return result.call(this, obj);
+    };
+  });
+
+  // Add all accessor Array functions to the wrapper.
+  each(['concat', 'join', 'slice'], function(name) {
+    var method = ArrayProto[name];
+    _.prototype[name] = function() {
+      return result.call(this, method.apply(this._wrapped, arguments));
+    };
+  });
+
+  _.extend(_.prototype, {
+
+    // Start chaining a wrapped Underscore object.
+    chain: function() {
+      this._chain = true;
+      return this;
+    },
+
+    // Extracts the result from a wrapped and chained object.
+    value: function() {
+      return this._wrapped;
+    }
+
+  });
+
+}).call(this);
+
+})()
+},{}]},{},[1])
 ;
