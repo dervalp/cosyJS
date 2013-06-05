@@ -30,6 +30,10 @@ if (typeof exports !== 'undefined') {
     _c = root._c = {};
 }
 
+if(isBrowser) {
+  window._c = _c;
+}
+
 _c.version = "0.0.1";
 
 
@@ -181,6 +185,13 @@ if(isBrowser) {
 }
 
 var emtpy = function() {};
+
+var scripts = [];
+
+_c.define = function(name, code) {
+  scripts.push({ name:name, code: code });
+}
+
 _c.component = function(obj) {
 
     var componentName = obj.type,
@@ -327,6 +338,25 @@ var parseApp = function(controls) {
   });
 };
 
+var loadBusinessScript = function () {
+  var nbScript = _c.__c_scripts.length, scriptLoaded = 0;
+
+  nbScript.forEach(function(script){
+    attachScript({ url: script }, function(){
+      scriptLoaded++;
+      if(scriptLoaded == nbScript) {
+        _c.trigger("cosy-ready");
+      }
+    });
+  });
+};
+
+var executeBusinessScript = function () {
+  _.each(scripts, function(script) {
+    script.code.apply(_c.app);
+  })
+};
+
 var exposedComponent = function(control, initValues) {
   var component = _c.components[control.type] || undefined,
       model,
@@ -347,6 +377,8 @@ _.extend(_c, Backbone.Events);
 
 if(isBrowser) {
   jQuery.when(parseDom(), load()).done(parseApp);
+  _c.on("cosy-loaded", loadBusinessScript);
+  _c.on("cosy-ready", executeBusinessScript);
 }
 
 }).call(this);
