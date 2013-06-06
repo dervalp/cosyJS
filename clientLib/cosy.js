@@ -1,5 +1,6 @@
 var Backbone = require("Backbone"),
     rivets = require("rivets"),
+    tmplSystem = require("Handlebars"),
     _ = require("underscore");
 
 var isBrowser = typeof window !== 'undefined';
@@ -43,14 +44,14 @@ var templateEngine = function() {
   var cache = {};
 
   return {
-    get: function(path) {
+    get: function(path, cb) {
       var template = cache[path];
       if(!template) {
-        Backbone.$.get(path, function(data){
-          var compiled = _.template(data);
+        Backbone.$.get("template/" + path, function(data) {
+          var compiled = tmplSystem.compile(data);
           cache[path] = compiled;
 
-          return cb(compiled);  
+          return cb(compiled);
         });
       } else {
         return cb(template);
@@ -68,7 +69,7 @@ _c.setEngine = function(tmplEngine) {
 var modules = {};
 
 _c.define = function(name, content) {
-  new Function(content).call(modules[name]);
+  content.call(modules[name], Backbone);
 };
 /**
  * Rivets adapters
@@ -97,9 +98,9 @@ if(isBrowser) {
 /**
  * Static Definitions
  */
-var ComponentModel = Backbone.Model;
+var ComponentModel = _c.Model = Backbone.Model;
 
-var ComponentView = Backbone.View.extend({
+var ComponentView = _c.View = Backbone.View.extend({
   render: function (cb) {
     var that = this;
     _c.templateEngine.get(this.model.get("type"), function(tmpl){
