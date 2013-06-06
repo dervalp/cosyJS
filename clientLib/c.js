@@ -112,10 +112,14 @@ var ComponentView = _c.View = Backbone.View.extend({
 });
 
 if(isBrowser) {
-  ComponentView = ComponentView.extend({
+  ComponentView = _c.View = ComponentView.extend({
     initialize: function() {
       rivets.bind(this.$el, { model: this.model });
-    }    
+      this._cInit();
+    },
+     _cInit: function () {
+    
+    } 
   });
 }
 
@@ -226,8 +230,8 @@ _c.component = function(obj) {
     });
 
     view = baseView.extend(functions);
-    view = baseView.extend({
-      cInit: initializeView
+    view = view.extend({
+      _cInit: initializeView
     });
 
     if(obj["listenTo"]) {
@@ -403,7 +407,7 @@ if(isBrowser) {
 }
 
 }).call(this);
-},{"Backbone":2,"Handlebars":3,"rivets":4,"underscore":5}],4:[function(require,module,exports){
+},{"rivets":2,"Backbone":3,"Handlebars":4,"underscore":5}],2:[function(require,module,exports){
 // rivets.js
 // version: 0.4.9
 // author: Michael Richards
@@ -2452,6 +2456,136 @@ return Handlebars;
 },{}],8:[function(require,module,exports){
 exports.attach = function(Handlebars) {
 
+var toString = Object.prototype.toString;
+
+// BEGIN(BROWSER)
+
+var errorProps = ['description', 'fileName', 'lineNumber', 'message', 'name', 'number', 'stack'];
+
+Handlebars.Exception = function(message) {
+  var tmp = Error.prototype.constructor.apply(this, arguments);
+
+  // Unfortunately errors are not enumerable in Chrome (at least), so `for prop in tmp` doesn't work.
+  for (var idx = 0; idx < errorProps.length; idx++) {
+    this[errorProps[idx]] = tmp[errorProps[idx]];
+  }
+};
+Handlebars.Exception.prototype = new Error();
+
+// Build out our basic SafeString type
+Handlebars.SafeString = function(string) {
+  this.string = string;
+};
+Handlebars.SafeString.prototype.toString = function() {
+  return this.string.toString();
+};
+
+var escape = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#x27;",
+  "`": "&#x60;"
+};
+
+var badChars = /[&<>"'`]/g;
+var possible = /[&<>"'`]/;
+
+var escapeChar = function(chr) {
+  return escape[chr] || "&amp;";
+};
+
+Handlebars.Utils = {
+  extend: function(obj, value) {
+    for(var key in value) {
+      if(value.hasOwnProperty(key)) {
+        obj[key] = value[key];
+      }
+    }
+  },
+
+  escapeExpression: function(string) {
+    // don't escape SafeStrings, since they're already safe
+    if (string instanceof Handlebars.SafeString) {
+      return string.toString();
+    } else if (string == null || string === false) {
+      return "";
+    }
+
+    // Force a string conversion as this will be done by the append regardless and
+    // the regex test will do this transparently behind the scenes, causing issues if
+    // an object's to string has escaped characters in it.
+    string = string.toString();
+
+    if(!possible.test(string)) { return string; }
+    return string.replace(badChars, escapeChar);
+  },
+
+  isEmpty: function(value) {
+    if (!value && value !== 0) {
+      return true;
+    } else if(toString.call(value) === "[object Array]" && value.length === 0) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+};
+
+// END(BROWSER)
+
+return Handlebars;
+};
+
+},{}],4:[function(require,module,exports){
+var handlebars = require("./handlebars/base"),
+
+// Each of these augment the Handlebars object. No need to setup here.
+// (This is done to easily share code between commonjs and browse envs)
+  utils = require("./handlebars/utils"),
+  compiler = require("./handlebars/compiler"),
+  runtime = require("./handlebars/runtime");
+
+var create = function() {
+  var hb = handlebars.create();
+
+  utils.attach(hb);
+  compiler.attach(hb);
+  runtime.attach(hb);
+
+  return hb;
+};
+
+var Handlebars = create();
+Handlebars.create = create;
+
+module.exports = Handlebars; // instantiate an instance
+
+// Publish a Node.js require() handler for .handlebars and .hbs files
+if (require.extensions) {
+  var extension = function(module, filename) {
+    var fs = require("fs");
+    var templateString = fs.readFileSync(filename, "utf8");
+    module.exports = Handlebars.compile(templateString);
+  };
+  require.extensions[".handlebars"] = extension;
+  require.extensions[".hbs"] = extension;
+}
+
+// BEGIN(BROWSER)
+
+// END(BROWSER)
+
+// USAGE:
+// var handlebars = require('handlebars');
+
+// var singleton = handlebars.Handlebars,
+//  local = handlebars.create();
+
+},{"fs":6,"./handlebars/base":7,"./handlebars/utils":8,"./handlebars/runtime":9,"./handlebars/compiler":10}],9:[function(require,module,exports){
+exports.attach = function(Handlebars) {
+
 // BEGIN(BROWSER)
 
 Handlebars.VM = {
@@ -2557,137 +2691,7 @@ return Handlebars;
 
 };
 
-},{}],9:[function(require,module,exports){
-exports.attach = function(Handlebars) {
-
-var toString = Object.prototype.toString;
-
-// BEGIN(BROWSER)
-
-var errorProps = ['description', 'fileName', 'lineNumber', 'message', 'name', 'number', 'stack'];
-
-Handlebars.Exception = function(message) {
-  var tmp = Error.prototype.constructor.apply(this, arguments);
-
-  // Unfortunately errors are not enumerable in Chrome (at least), so `for prop in tmp` doesn't work.
-  for (var idx = 0; idx < errorProps.length; idx++) {
-    this[errorProps[idx]] = tmp[errorProps[idx]];
-  }
-};
-Handlebars.Exception.prototype = new Error();
-
-// Build out our basic SafeString type
-Handlebars.SafeString = function(string) {
-  this.string = string;
-};
-Handlebars.SafeString.prototype.toString = function() {
-  return this.string.toString();
-};
-
-var escape = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-  "'": "&#x27;",
-  "`": "&#x60;"
-};
-
-var badChars = /[&<>"'`]/g;
-var possible = /[&<>"'`]/;
-
-var escapeChar = function(chr) {
-  return escape[chr] || "&amp;";
-};
-
-Handlebars.Utils = {
-  extend: function(obj, value) {
-    for(var key in value) {
-      if(value.hasOwnProperty(key)) {
-        obj[key] = value[key];
-      }
-    }
-  },
-
-  escapeExpression: function(string) {
-    // don't escape SafeStrings, since they're already safe
-    if (string instanceof Handlebars.SafeString) {
-      return string.toString();
-    } else if (string == null || string === false) {
-      return "";
-    }
-
-    // Force a string conversion as this will be done by the append regardless and
-    // the regex test will do this transparently behind the scenes, causing issues if
-    // an object's to string has escaped characters in it.
-    string = string.toString();
-
-    if(!possible.test(string)) { return string; }
-    return string.replace(badChars, escapeChar);
-  },
-
-  isEmpty: function(value) {
-    if (!value && value !== 0) {
-      return true;
-    } else if(toString.call(value) === "[object Array]" && value.length === 0) {
-      return true;
-    } else {
-      return false;
-    }
-  }
-};
-
-// END(BROWSER)
-
-return Handlebars;
-};
-
 },{}],3:[function(require,module,exports){
-var handlebars = require("./handlebars/base"),
-
-// Each of these augment the Handlebars object. No need to setup here.
-// (This is done to easily share code between commonjs and browse envs)
-  utils = require("./handlebars/utils"),
-  compiler = require("./handlebars/compiler"),
-  runtime = require("./handlebars/runtime");
-
-var create = function() {
-  var hb = handlebars.create();
-
-  utils.attach(hb);
-  compiler.attach(hb);
-  runtime.attach(hb);
-
-  return hb;
-};
-
-var Handlebars = create();
-Handlebars.create = create;
-
-module.exports = Handlebars; // instantiate an instance
-
-// Publish a Node.js require() handler for .handlebars and .hbs files
-if (require.extensions) {
-  var extension = function(module, filename) {
-    var fs = require("fs");
-    var templateString = fs.readFileSync(filename, "utf8");
-    module.exports = Handlebars.compile(templateString);
-  };
-  require.extensions[".handlebars"] = extension;
-  require.extensions[".hbs"] = extension;
-}
-
-// BEGIN(BROWSER)
-
-// END(BROWSER)
-
-// USAGE:
-// var handlebars = require('handlebars');
-
-// var singleton = handlebars.Handlebars,
-//  local = handlebars.create();
-
-},{"fs":6,"./handlebars/base":7,"./handlebars/utils":9,"./handlebars/runtime":8,"./handlebars/compiler":10}],2:[function(require,module,exports){
 (function(){//     Backbone.js 1.0.0
 
 //     (c) 2010-2013 Jeremy Ashkenas, DocumentCloud Inc.

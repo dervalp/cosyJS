@@ -1,18 +1,20 @@
 _c.component({
     type: "repeater",
     initialize: function() {
-        console.log("update");
-        this.model.on("change:collection", this.update, this);
+        this.model.on("change", this.afterRender, this);
     },
-    update: function() {
-        var collection = this.model.get("collection");
+    afterRender: function() {
         var $el = this.$el;
-        collection.each(function(model) {
-            var view = new _c.View({ model: model});
-            view.render(function(html) {
-                $el.append(html);
-            });
-            
+        var collection = this.model.get("collection");
+        collection.fetch({
+            success : function(todos) {
+                todos.each(function(model) {
+                    var view = new _c.View({ model: model});
+                    view.render(function(html) {
+                        $el.append(html);
+                    });
+                });
+            }
         });
     }
 });

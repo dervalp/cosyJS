@@ -111,10 +111,14 @@ var ComponentView = _c.View = Backbone.View.extend({
 });
 
 if(isBrowser) {
-  ComponentView = ComponentView.extend({
+  ComponentView = _c.View = ComponentView.extend({
     initialize: function() {
       rivets.bind(this.$el, { model: this.model });
-    }    
+      this._cInit();
+    },
+     _cInit: function () {
+    
+    } 
   });
 }
 
@@ -225,8 +229,8 @@ _c.component = function(obj) {
     });
 
     view = baseView.extend(functions);
-    view = baseView.extend({
-      cInit: initializeView
+    view = view.extend({
+      _cInit: initializeView
     });
 
     if(obj["listenTo"]) {
