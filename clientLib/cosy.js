@@ -134,6 +134,7 @@ var ComponentModel = _c.Model = Backbone.Model;
 var ComponentView = _c.View = Backbone.View.extend({
   initialize: function(options) {
     this.template = options.template || undefined;
+    this.module = options.module;
   },
   render: function (cb) {
     var self = this,
@@ -162,7 +163,8 @@ if(isBrowser) {
   ComponentView = _c.View = ComponentView.extend({
     initialize: function(options) {
       this.template = options.template;
-      this.bindings = rivets.bind(this.$el, { model: this.model });
+      this.module = options.module;
+      this.bindings = rivets.bind(this.$el, { model: this.model, view: this });
       this._cInit();
     },
      _cInit: function () { }
@@ -445,11 +447,11 @@ var exposedComponent = function(control, initValues, module) {
     } else {
       collection = undefined;
     }
-    view = new component.view({ model: model, el: "." + control.id, collection: collection });
+    view = new component.view({ model: model, el: "." + control.id, collection: collection, module: module });
   } else {
     //try to create based html
     model = new ComponentModel(initValues);
-    view = new ComponentView({ model: model, el: "." + control.id });
+    view = new ComponentView({ model: model, el: "." + control.id, module: module });
   }
   _c.controls = _c.controls || [];
   _c.controls.push({ id: control.key, model: model, view: view, collection: collection });
