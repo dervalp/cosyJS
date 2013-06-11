@@ -462,7 +462,7 @@ if(isBrowser) {
 }
 
 }).call(this);
-},{"Handlebars":2,"Backbone":3,"rivets":4,"underscore":5}],4:[function(require,module,exports){
+},{"Backbone":2,"Handlebars":3,"rivets":4,"underscore":5}],4:[function(require,module,exports){
 // Rivets.js
 // version: 0.5.7
 // author: Michael Richards
@@ -2505,7 +2505,7 @@ if(isBrowser) {
 },{}],6:[function(require,module,exports){
 // nothing to see here... no file methods for the browser
 
-},{}],2:[function(require,module,exports){
+},{}],3:[function(require,module,exports){
 var handlebars = require("./handlebars/base"),
 
 // Each of these augment the Handlebars object. No need to setup here.
@@ -2550,115 +2550,7 @@ if (require.extensions) {
 // var singleton = handlebars.Handlebars,
 //  local = handlebars.create();
 
-},{"fs":6,"./handlebars/utils":7,"./handlebars/runtime":8,"./handlebars/base":9,"./handlebars/compiler":10}],8:[function(require,module,exports){
-exports.attach = function(Handlebars) {
-
-// BEGIN(BROWSER)
-
-Handlebars.VM = {
-  template: function(templateSpec) {
-    // Just add water
-    var container = {
-      escapeExpression: Handlebars.Utils.escapeExpression,
-      invokePartial: Handlebars.VM.invokePartial,
-      programs: [],
-      program: function(i, fn, data) {
-        var programWrapper = this.programs[i];
-        if(data) {
-          programWrapper = Handlebars.VM.program(i, fn, data);
-        } else if (!programWrapper) {
-          programWrapper = this.programs[i] = Handlebars.VM.program(i, fn);
-        }
-        return programWrapper;
-      },
-      merge: function(param, common) {
-        var ret = param || common;
-
-        if (param && common) {
-          ret = {};
-          Handlebars.Utils.extend(ret, common);
-          Handlebars.Utils.extend(ret, param);
-        }
-        return ret;
-      },
-      programWithDepth: Handlebars.VM.programWithDepth,
-      noop: Handlebars.VM.noop,
-      compilerInfo: null
-    };
-
-    return function(context, options) {
-      options = options || {};
-      var result = templateSpec.call(container, Handlebars, context, options.helpers, options.partials, options.data);
-
-      var compilerInfo = container.compilerInfo || [],
-          compilerRevision = compilerInfo[0] || 1,
-          currentRevision = Handlebars.COMPILER_REVISION;
-
-      if (compilerRevision !== currentRevision) {
-        if (compilerRevision < currentRevision) {
-          var runtimeVersions = Handlebars.REVISION_CHANGES[currentRevision],
-              compilerVersions = Handlebars.REVISION_CHANGES[compilerRevision];
-          throw "Template was precompiled with an older version of Handlebars than the current runtime. "+
-                "Please update your precompiler to a newer version ("+runtimeVersions+") or downgrade your runtime to an older version ("+compilerVersions+").";
-        } else {
-          // Use the embedded version info since the runtime doesn't know about this revision yet
-          throw "Template was precompiled with a newer version of Handlebars than the current runtime. "+
-                "Please update your runtime to a newer version ("+compilerInfo[1]+").";
-        }
-      }
-
-      return result;
-    };
-  },
-
-  programWithDepth: function(i, fn, data /*, $depth */) {
-    var args = Array.prototype.slice.call(arguments, 3);
-
-    var program = function(context, options) {
-      options = options || {};
-
-      return fn.apply(this, [context, options.data || data].concat(args));
-    };
-    program.program = i;
-    program.depth = args.length;
-    return program;
-  },
-  program: function(i, fn, data) {
-    var program = function(context, options) {
-      options = options || {};
-
-      return fn(context, options.data || data);
-    };
-    program.program = i;
-    program.depth = 0;
-    return program;
-  },
-  noop: function() { return ""; },
-  invokePartial: function(partial, name, context, helpers, partials, data) {
-    var options = { helpers: helpers, partials: partials, data: data };
-
-    if(partial === undefined) {
-      throw new Handlebars.Exception("The partial " + name + " could not be found");
-    } else if(partial instanceof Function) {
-      return partial(context, options);
-    } else if (!Handlebars.compile) {
-      throw new Handlebars.Exception("The partial " + name + " could not be compiled when running in runtime-only mode");
-    } else {
-      partials[name] = Handlebars.compile(partial, {data: data !== undefined});
-      return partials[name](context, options);
-    }
-  }
-};
-
-Handlebars.template = Handlebars.VM.template;
-
-// END(BROWSER)
-
-return Handlebars;
-
-};
-
-},{}],7:[function(require,module,exports){
+},{"fs":6,"./handlebars/base":7,"./handlebars/utils":8,"./handlebars/runtime":9,"./handlebars/compiler":10}],8:[function(require,module,exports){
 exports.attach = function(Handlebars) {
 
 var toString = Object.prototype.toString;
@@ -2743,175 +2635,7 @@ Handlebars.Utils = {
 return Handlebars;
 };
 
-},{}],9:[function(require,module,exports){
-/*jshint eqnull: true */
-
-module.exports.create = function() {
-
-var Handlebars = {};
-
-// BEGIN(BROWSER)
-
-Handlebars.VERSION = "1.0.0";
-Handlebars.COMPILER_REVISION = 4;
-
-Handlebars.REVISION_CHANGES = {
-  1: '<= 1.0.rc.2', // 1.0.rc.2 is actually rev2 but doesn't report it
-  2: '== 1.0.0-rc.3',
-  3: '== 1.0.0-rc.4',
-  4: '>= 1.0.0'
-};
-
-Handlebars.helpers  = {};
-Handlebars.partials = {};
-
-var toString = Object.prototype.toString,
-    functionType = '[object Function]',
-    objectType = '[object Object]';
-
-Handlebars.registerHelper = function(name, fn, inverse) {
-  if (toString.call(name) === objectType) {
-    if (inverse || fn) { throw new Handlebars.Exception('Arg not supported with multiple helpers'); }
-    Handlebars.Utils.extend(this.helpers, name);
-  } else {
-    if (inverse) { fn.not = inverse; }
-    this.helpers[name] = fn;
-  }
-};
-
-Handlebars.registerPartial = function(name, str) {
-  if (toString.call(name) === objectType) {
-    Handlebars.Utils.extend(this.partials,  name);
-  } else {
-    this.partials[name] = str;
-  }
-};
-
-Handlebars.registerHelper('helperMissing', function(arg) {
-  if(arguments.length === 2) {
-    return undefined;
-  } else {
-    throw new Error("Missing helper: '" + arg + "'");
-  }
-});
-
-Handlebars.registerHelper('blockHelperMissing', function(context, options) {
-  var inverse = options.inverse || function() {}, fn = options.fn;
-
-  var type = toString.call(context);
-
-  if(type === functionType) { context = context.call(this); }
-
-  if(context === true) {
-    return fn(this);
-  } else if(context === false || context == null) {
-    return inverse(this);
-  } else if(type === "[object Array]") {
-    if(context.length > 0) {
-      return Handlebars.helpers.each(context, options);
-    } else {
-      return inverse(this);
-    }
-  } else {
-    return fn(context);
-  }
-});
-
-Handlebars.K = function() {};
-
-Handlebars.createFrame = Object.create || function(object) {
-  Handlebars.K.prototype = object;
-  var obj = new Handlebars.K();
-  Handlebars.K.prototype = null;
-  return obj;
-};
-
-Handlebars.logger = {
-  DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3, level: 3,
-
-  methodMap: {0: 'debug', 1: 'info', 2: 'warn', 3: 'error'},
-
-  // can be overridden in the host environment
-  log: function(level, obj) {
-    if (Handlebars.logger.level <= level) {
-      var method = Handlebars.logger.methodMap[level];
-      if (typeof console !== 'undefined' && console[method]) {
-        console[method].call(console, obj);
-      }
-    }
-  }
-};
-
-Handlebars.log = function(level, obj) { Handlebars.logger.log(level, obj); };
-
-Handlebars.registerHelper('each', function(context, options) {
-  var fn = options.fn, inverse = options.inverse;
-  var i = 0, ret = "", data;
-
-  var type = toString.call(context);
-  if(type === functionType) { context = context.call(this); }
-
-  if (options.data) {
-    data = Handlebars.createFrame(options.data);
-  }
-
-  if(context && typeof context === 'object') {
-    if(context instanceof Array){
-      for(var j = context.length; i<j; i++) {
-        if (data) { data.index = i; }
-        ret = ret + fn(context[i], { data: data });
-      }
-    } else {
-      for(var key in context) {
-        if(context.hasOwnProperty(key)) {
-          if(data) { data.key = key; }
-          ret = ret + fn(context[key], {data: data});
-          i++;
-        }
-      }
-    }
-  }
-
-  if(i === 0){
-    ret = inverse(this);
-  }
-
-  return ret;
-});
-
-Handlebars.registerHelper('if', function(conditional, options) {
-  var type = toString.call(conditional);
-  if(type === functionType) { conditional = conditional.call(this); }
-
-  if(!conditional || Handlebars.Utils.isEmpty(conditional)) {
-    return options.inverse(this);
-  } else {
-    return options.fn(this);
-  }
-});
-
-Handlebars.registerHelper('unless', function(conditional, options) {
-  return Handlebars.helpers['if'].call(this, conditional, {fn: options.inverse, inverse: options.fn});
-});
-
-Handlebars.registerHelper('with', function(context, options) {
-  var type = toString.call(context);
-  if(type === functionType) { context = context.call(this); }
-
-  if (!Handlebars.Utils.isEmpty(context)) return options.fn(context);
-});
-
-Handlebars.registerHelper('log', function(context, options) {
-  var level = options.data && options.data.level != null ? parseInt(options.data.level, 10) : 1;
-  Handlebars.log(level, context);
-});
-
-// END(BROWSER)
-
-return Handlebars;
-};
-
-},{}],3:[function(require,module,exports){
+},{}],2:[function(require,module,exports){
 (function(){//     Backbone.js 1.0.0
 
 //     (c) 2010-2013 Jeremy Ashkenas, DocumentCloud Inc.
@@ -4485,7 +4209,283 @@ return Handlebars;
 }).call(this);
 
 })()
-},{"underscore":11}],11:[function(require,module,exports){
+},{"underscore":11}],7:[function(require,module,exports){
+/*jshint eqnull: true */
+
+module.exports.create = function() {
+
+var Handlebars = {};
+
+// BEGIN(BROWSER)
+
+Handlebars.VERSION = "1.0.0";
+Handlebars.COMPILER_REVISION = 4;
+
+Handlebars.REVISION_CHANGES = {
+  1: '<= 1.0.rc.2', // 1.0.rc.2 is actually rev2 but doesn't report it
+  2: '== 1.0.0-rc.3',
+  3: '== 1.0.0-rc.4',
+  4: '>= 1.0.0'
+};
+
+Handlebars.helpers  = {};
+Handlebars.partials = {};
+
+var toString = Object.prototype.toString,
+    functionType = '[object Function]',
+    objectType = '[object Object]';
+
+Handlebars.registerHelper = function(name, fn, inverse) {
+  if (toString.call(name) === objectType) {
+    if (inverse || fn) { throw new Handlebars.Exception('Arg not supported with multiple helpers'); }
+    Handlebars.Utils.extend(this.helpers, name);
+  } else {
+    if (inverse) { fn.not = inverse; }
+    this.helpers[name] = fn;
+  }
+};
+
+Handlebars.registerPartial = function(name, str) {
+  if (toString.call(name) === objectType) {
+    Handlebars.Utils.extend(this.partials,  name);
+  } else {
+    this.partials[name] = str;
+  }
+};
+
+Handlebars.registerHelper('helperMissing', function(arg) {
+  if(arguments.length === 2) {
+    return undefined;
+  } else {
+    throw new Error("Missing helper: '" + arg + "'");
+  }
+});
+
+Handlebars.registerHelper('blockHelperMissing', function(context, options) {
+  var inverse = options.inverse || function() {}, fn = options.fn;
+
+  var type = toString.call(context);
+
+  if(type === functionType) { context = context.call(this); }
+
+  if(context === true) {
+    return fn(this);
+  } else if(context === false || context == null) {
+    return inverse(this);
+  } else if(type === "[object Array]") {
+    if(context.length > 0) {
+      return Handlebars.helpers.each(context, options);
+    } else {
+      return inverse(this);
+    }
+  } else {
+    return fn(context);
+  }
+});
+
+Handlebars.K = function() {};
+
+Handlebars.createFrame = Object.create || function(object) {
+  Handlebars.K.prototype = object;
+  var obj = new Handlebars.K();
+  Handlebars.K.prototype = null;
+  return obj;
+};
+
+Handlebars.logger = {
+  DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3, level: 3,
+
+  methodMap: {0: 'debug', 1: 'info', 2: 'warn', 3: 'error'},
+
+  // can be overridden in the host environment
+  log: function(level, obj) {
+    if (Handlebars.logger.level <= level) {
+      var method = Handlebars.logger.methodMap[level];
+      if (typeof console !== 'undefined' && console[method]) {
+        console[method].call(console, obj);
+      }
+    }
+  }
+};
+
+Handlebars.log = function(level, obj) { Handlebars.logger.log(level, obj); };
+
+Handlebars.registerHelper('each', function(context, options) {
+  var fn = options.fn, inverse = options.inverse;
+  var i = 0, ret = "", data;
+
+  var type = toString.call(context);
+  if(type === functionType) { context = context.call(this); }
+
+  if (options.data) {
+    data = Handlebars.createFrame(options.data);
+  }
+
+  if(context && typeof context === 'object') {
+    if(context instanceof Array){
+      for(var j = context.length; i<j; i++) {
+        if (data) { data.index = i; }
+        ret = ret + fn(context[i], { data: data });
+      }
+    } else {
+      for(var key in context) {
+        if(context.hasOwnProperty(key)) {
+          if(data) { data.key = key; }
+          ret = ret + fn(context[key], {data: data});
+          i++;
+        }
+      }
+    }
+  }
+
+  if(i === 0){
+    ret = inverse(this);
+  }
+
+  return ret;
+});
+
+Handlebars.registerHelper('if', function(conditional, options) {
+  var type = toString.call(conditional);
+  if(type === functionType) { conditional = conditional.call(this); }
+
+  if(!conditional || Handlebars.Utils.isEmpty(conditional)) {
+    return options.inverse(this);
+  } else {
+    return options.fn(this);
+  }
+});
+
+Handlebars.registerHelper('unless', function(conditional, options) {
+  return Handlebars.helpers['if'].call(this, conditional, {fn: options.inverse, inverse: options.fn});
+});
+
+Handlebars.registerHelper('with', function(context, options) {
+  var type = toString.call(context);
+  if(type === functionType) { context = context.call(this); }
+
+  if (!Handlebars.Utils.isEmpty(context)) return options.fn(context);
+});
+
+Handlebars.registerHelper('log', function(context, options) {
+  var level = options.data && options.data.level != null ? parseInt(options.data.level, 10) : 1;
+  Handlebars.log(level, context);
+});
+
+// END(BROWSER)
+
+return Handlebars;
+};
+
+},{}],9:[function(require,module,exports){
+exports.attach = function(Handlebars) {
+
+// BEGIN(BROWSER)
+
+Handlebars.VM = {
+  template: function(templateSpec) {
+    // Just add water
+    var container = {
+      escapeExpression: Handlebars.Utils.escapeExpression,
+      invokePartial: Handlebars.VM.invokePartial,
+      programs: [],
+      program: function(i, fn, data) {
+        var programWrapper = this.programs[i];
+        if(data) {
+          programWrapper = Handlebars.VM.program(i, fn, data);
+        } else if (!programWrapper) {
+          programWrapper = this.programs[i] = Handlebars.VM.program(i, fn);
+        }
+        return programWrapper;
+      },
+      merge: function(param, common) {
+        var ret = param || common;
+
+        if (param && common) {
+          ret = {};
+          Handlebars.Utils.extend(ret, common);
+          Handlebars.Utils.extend(ret, param);
+        }
+        return ret;
+      },
+      programWithDepth: Handlebars.VM.programWithDepth,
+      noop: Handlebars.VM.noop,
+      compilerInfo: null
+    };
+
+    return function(context, options) {
+      options = options || {};
+      var result = templateSpec.call(container, Handlebars, context, options.helpers, options.partials, options.data);
+
+      var compilerInfo = container.compilerInfo || [],
+          compilerRevision = compilerInfo[0] || 1,
+          currentRevision = Handlebars.COMPILER_REVISION;
+
+      if (compilerRevision !== currentRevision) {
+        if (compilerRevision < currentRevision) {
+          var runtimeVersions = Handlebars.REVISION_CHANGES[currentRevision],
+              compilerVersions = Handlebars.REVISION_CHANGES[compilerRevision];
+          throw "Template was precompiled with an older version of Handlebars than the current runtime. "+
+                "Please update your precompiler to a newer version ("+runtimeVersions+") or downgrade your runtime to an older version ("+compilerVersions+").";
+        } else {
+          // Use the embedded version info since the runtime doesn't know about this revision yet
+          throw "Template was precompiled with a newer version of Handlebars than the current runtime. "+
+                "Please update your runtime to a newer version ("+compilerInfo[1]+").";
+        }
+      }
+
+      return result;
+    };
+  },
+
+  programWithDepth: function(i, fn, data /*, $depth */) {
+    var args = Array.prototype.slice.call(arguments, 3);
+
+    var program = function(context, options) {
+      options = options || {};
+
+      return fn.apply(this, [context, options.data || data].concat(args));
+    };
+    program.program = i;
+    program.depth = args.length;
+    return program;
+  },
+  program: function(i, fn, data) {
+    var program = function(context, options) {
+      options = options || {};
+
+      return fn(context, options.data || data);
+    };
+    program.program = i;
+    program.depth = 0;
+    return program;
+  },
+  noop: function() { return ""; },
+  invokePartial: function(partial, name, context, helpers, partials, data) {
+    var options = { helpers: helpers, partials: partials, data: data };
+
+    if(partial === undefined) {
+      throw new Handlebars.Exception("The partial " + name + " could not be found");
+    } else if(partial instanceof Function) {
+      return partial(context, options);
+    } else if (!Handlebars.compile) {
+      throw new Handlebars.Exception("The partial " + name + " could not be compiled when running in runtime-only mode");
+    } else {
+      partials[name] = Handlebars.compile(partial, {data: data !== undefined});
+      return partials[name](context, options);
+    }
+  }
+};
+
+Handlebars.template = Handlebars.VM.template;
+
+// END(BROWSER)
+
+return Handlebars;
+
+};
+
+},{}],11:[function(require,module,exports){
 (function(){//     Underscore.js 1.4.4
 //     http://underscorejs.org
 //     (c) 2009-2013 Jeremy Ashkenas, DocumentCloud Inc.
@@ -5732,7 +5732,7 @@ return Handlebars;
 
 };
 
-},{"./visitor":12,"./printer":13,"./ast":14,"./compiler":15}],12:[function(require,module,exports){
+},{"./visitor":12,"./ast":13,"./printer":14,"./compiler":15}],12:[function(require,module,exports){
 exports.attach = function(Handlebars) {
 
 // BEGIN(BROWSER)
@@ -5753,146 +5753,6 @@ return Handlebars;
 
 
 },{}],13:[function(require,module,exports){
-exports.attach = function(Handlebars) {
-
-// BEGIN(BROWSER)
-
-Handlebars.print = function(ast) {
-  return new Handlebars.PrintVisitor().accept(ast);
-};
-
-Handlebars.PrintVisitor = function() { this.padding = 0; };
-Handlebars.PrintVisitor.prototype = new Handlebars.Visitor();
-
-Handlebars.PrintVisitor.prototype.pad = function(string, newline) {
-  var out = "";
-
-  for(var i=0,l=this.padding; i<l; i++) {
-    out = out + "  ";
-  }
-
-  out = out + string;
-
-  if(newline !== false) { out = out + "\n"; }
-  return out;
-};
-
-Handlebars.PrintVisitor.prototype.program = function(program) {
-  var out = "",
-      statements = program.statements,
-      inverse = program.inverse,
-      i, l;
-
-  for(i=0, l=statements.length; i<l; i++) {
-    out = out + this.accept(statements[i]);
-  }
-
-  this.padding--;
-
-  return out;
-};
-
-Handlebars.PrintVisitor.prototype.block = function(block) {
-  var out = "";
-
-  out = out + this.pad("BLOCK:");
-  this.padding++;
-  out = out + this.accept(block.mustache);
-  if (block.program) {
-    out = out + this.pad("PROGRAM:");
-    this.padding++;
-    out = out + this.accept(block.program);
-    this.padding--;
-  }
-  if (block.inverse) {
-    if (block.program) { this.padding++; }
-    out = out + this.pad("{{^}}");
-    this.padding++;
-    out = out + this.accept(block.inverse);
-    this.padding--;
-    if (block.program) { this.padding--; }
-  }
-  this.padding--;
-
-  return out;
-};
-
-Handlebars.PrintVisitor.prototype.mustache = function(mustache) {
-  var params = mustache.params, paramStrings = [], hash;
-
-  for(var i=0, l=params.length; i<l; i++) {
-    paramStrings.push(this.accept(params[i]));
-  }
-
-  params = "[" + paramStrings.join(", ") + "]";
-
-  hash = mustache.hash ? " " + this.accept(mustache.hash) : "";
-
-  return this.pad("{{ " + this.accept(mustache.id) + " " + params + hash + " }}");
-};
-
-Handlebars.PrintVisitor.prototype.partial = function(partial) {
-  var content = this.accept(partial.partialName);
-  if(partial.context) { content = content + " " + this.accept(partial.context); }
-  return this.pad("{{> " + content + " }}");
-};
-
-Handlebars.PrintVisitor.prototype.hash = function(hash) {
-  var pairs = hash.pairs;
-  var joinedPairs = [], left, right;
-
-  for(var i=0, l=pairs.length; i<l; i++) {
-    left = pairs[i][0];
-    right = this.accept(pairs[i][1]);
-    joinedPairs.push( left + "=" + right );
-  }
-
-  return "HASH{" + joinedPairs.join(", ") + "}";
-};
-
-Handlebars.PrintVisitor.prototype.STRING = function(string) {
-  return '"' + string.string + '"';
-};
-
-Handlebars.PrintVisitor.prototype.INTEGER = function(integer) {
-  return "INTEGER{" + integer.integer + "}";
-};
-
-Handlebars.PrintVisitor.prototype.BOOLEAN = function(bool) {
-  return "BOOLEAN{" + bool.bool + "}";
-};
-
-Handlebars.PrintVisitor.prototype.ID = function(id) {
-  var path = id.parts.join("/");
-  if(id.parts.length > 1) {
-    return "PATH:" + path;
-  } else {
-    return "ID:" + path;
-  }
-};
-
-Handlebars.PrintVisitor.prototype.PARTIAL_NAME = function(partialName) {
-    return "PARTIAL:" + partialName.name;
-};
-
-Handlebars.PrintVisitor.prototype.DATA = function(data) {
-  return "@" + this.accept(data.id);
-};
-
-Handlebars.PrintVisitor.prototype.content = function(content) {
-  return this.pad("CONTENT[ '" + content.string + "' ]");
-};
-
-Handlebars.PrintVisitor.prototype.comment = function(comment) {
-  return this.pad("{{! '" + comment.comment + "' }}");
-};
-// END(BROWSER)
-
-return Handlebars;
-};
-
-
-},{}],14:[function(require,module,exports){
 exports.attach = function(Handlebars) {
 
 // BEGIN(BROWSER)
@@ -6026,6 +5886,146 @@ Handlebars.AST.CommentNode = function(comment) {
   this.comment = comment;
 };
 
+// END(BROWSER)
+
+return Handlebars;
+};
+
+
+},{}],14:[function(require,module,exports){
+exports.attach = function(Handlebars) {
+
+// BEGIN(BROWSER)
+
+Handlebars.print = function(ast) {
+  return new Handlebars.PrintVisitor().accept(ast);
+};
+
+Handlebars.PrintVisitor = function() { this.padding = 0; };
+Handlebars.PrintVisitor.prototype = new Handlebars.Visitor();
+
+Handlebars.PrintVisitor.prototype.pad = function(string, newline) {
+  var out = "";
+
+  for(var i=0,l=this.padding; i<l; i++) {
+    out = out + "  ";
+  }
+
+  out = out + string;
+
+  if(newline !== false) { out = out + "\n"; }
+  return out;
+};
+
+Handlebars.PrintVisitor.prototype.program = function(program) {
+  var out = "",
+      statements = program.statements,
+      inverse = program.inverse,
+      i, l;
+
+  for(i=0, l=statements.length; i<l; i++) {
+    out = out + this.accept(statements[i]);
+  }
+
+  this.padding--;
+
+  return out;
+};
+
+Handlebars.PrintVisitor.prototype.block = function(block) {
+  var out = "";
+
+  out = out + this.pad("BLOCK:");
+  this.padding++;
+  out = out + this.accept(block.mustache);
+  if (block.program) {
+    out = out + this.pad("PROGRAM:");
+    this.padding++;
+    out = out + this.accept(block.program);
+    this.padding--;
+  }
+  if (block.inverse) {
+    if (block.program) { this.padding++; }
+    out = out + this.pad("{{^}}");
+    this.padding++;
+    out = out + this.accept(block.inverse);
+    this.padding--;
+    if (block.program) { this.padding--; }
+  }
+  this.padding--;
+
+  return out;
+};
+
+Handlebars.PrintVisitor.prototype.mustache = function(mustache) {
+  var params = mustache.params, paramStrings = [], hash;
+
+  for(var i=0, l=params.length; i<l; i++) {
+    paramStrings.push(this.accept(params[i]));
+  }
+
+  params = "[" + paramStrings.join(", ") + "]";
+
+  hash = mustache.hash ? " " + this.accept(mustache.hash) : "";
+
+  return this.pad("{{ " + this.accept(mustache.id) + " " + params + hash + " }}");
+};
+
+Handlebars.PrintVisitor.prototype.partial = function(partial) {
+  var content = this.accept(partial.partialName);
+  if(partial.context) { content = content + " " + this.accept(partial.context); }
+  return this.pad("{{> " + content + " }}");
+};
+
+Handlebars.PrintVisitor.prototype.hash = function(hash) {
+  var pairs = hash.pairs;
+  var joinedPairs = [], left, right;
+
+  for(var i=0, l=pairs.length; i<l; i++) {
+    left = pairs[i][0];
+    right = this.accept(pairs[i][1]);
+    joinedPairs.push( left + "=" + right );
+  }
+
+  return "HASH{" + joinedPairs.join(", ") + "}";
+};
+
+Handlebars.PrintVisitor.prototype.STRING = function(string) {
+  return '"' + string.string + '"';
+};
+
+Handlebars.PrintVisitor.prototype.INTEGER = function(integer) {
+  return "INTEGER{" + integer.integer + "}";
+};
+
+Handlebars.PrintVisitor.prototype.BOOLEAN = function(bool) {
+  return "BOOLEAN{" + bool.bool + "}";
+};
+
+Handlebars.PrintVisitor.prototype.ID = function(id) {
+  var path = id.parts.join("/");
+  if(id.parts.length > 1) {
+    return "PATH:" + path;
+  } else {
+    return "ID:" + path;
+  }
+};
+
+Handlebars.PrintVisitor.prototype.PARTIAL_NAME = function(partialName) {
+    return "PARTIAL:" + partialName.name;
+};
+
+Handlebars.PrintVisitor.prototype.DATA = function(data) {
+  return "@" + this.accept(data.id);
+};
+
+Handlebars.PrintVisitor.prototype.content = function(content) {
+  return this.pad("CONTENT[ '" + content.string + "' ]");
+};
+
+Handlebars.PrintVisitor.prototype.comment = function(comment) {
+  return this.pad("{{! '" + comment.comment + "' }}");
+};
 // END(BROWSER)
 
 return Handlebars;
