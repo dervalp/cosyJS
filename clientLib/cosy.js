@@ -63,7 +63,7 @@ var templateEngine = function() {
 _c.templateEngine = templateEngine();
 
 _c.setEngine = function(tmplEngine) {
-  _c.templateEngine = tmplEngine();
+  _c.templateEngine = tmplEngine;
 };
 
 var modules = {};
