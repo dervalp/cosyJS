@@ -1,6 +1,6 @@
 var Backbone = require("backbone"),
     rivets = require("rivets"),
-    tmplSystem = require("Handlebars"),
+    tmplSystem = require("handlebars"),
     _ = require("underscore");
 
 var isBrowser = typeof window !== 'undefined';
