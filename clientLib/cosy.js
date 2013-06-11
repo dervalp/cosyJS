@@ -108,7 +108,7 @@ if(isBrowser) {
     }
   });
 
-  Rivets.config.handler = function(context, ev, bindings) {
+  rivets.config.handler = function(context, ev, bindings) {
     if(key === "model") {
       return bindings.model[bindings.keypath].call(bindings.model, ev);
     } else if (key === "view") {
