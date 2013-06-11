@@ -92,6 +92,18 @@ if(isBrowser) {
       }
     }
   });
+
+  Rivets.config.handler = function(context, ev, bindings) {
+    if(key === "model") {
+      return bindings.model[bindings.keypath].call(bindings.model, ev);
+    } else if (key === "view") {
+      return bindings.view[bindings.keypath].call(bindings.view, ev);
+    } else if (key === "module") {
+      return bindings.view.module[bindings.keypath].call(bindings.view.module, ev);
+    } else {
+      throw "no handler found";
+    }
+  };
 }
 
 
@@ -101,24 +113,37 @@ if(isBrowser) {
 var ComponentModel = _c.Model = Backbone.Model;
 
 var ComponentView = _c.View = Backbone.View.extend({
+  initialize: function(options) {
+    this.template = options.template || undefined;
+  },
   render: function (cb) {
-    var that = this;
-    _c.templateEngine.get(this.model.get("type"), function(tmpl){
-      var html = tmpl(that.model.toJSON());
-      return cb(html);
+    var self = this,
+        template = this.template || this.model.get("type") || undefined;
+
+    _c.templateEngine.get(template, function(tmpl) {
+      var html = tmpl(self.model.toJSON());
+      if(isBrowser) {
+        self.$el.html(html);
+        self.bindings.build();
+        if(cb) {
+          cb(html);
+        }
+      } else {
+        return cb(html);
+      }
     });
+    return self;
   }
 });
 
 if(isBrowser) {
   ComponentView = _c.View = ComponentView.extend({
-    initialize: function() {
-      rivets.bind(this.$el, { model: this.model });
+    initialize: function(options) {
+      this.template = options.template;
+      this.bindings = rivets.bind(this.$el, { model: this.model });
       this._cInit();
     },
-     _cInit: function () {
-    
-    } 
+     _cInit: function () { }
   });
 }
 
@@ -130,9 +155,13 @@ var Module = Backbone.Model.extend({
     initialize: function() {
         this.components = new Components();
     },
-    add: function(name, model) {
-        this[name] = model;
-        this.components.add(model);
+    add: function(name, model, collection) {
+        var expose = model;
+        if(collection) {
+          expose = collection
+        }
+        this[name] = expose;
+        this.components.add(expose);
     }
 });
 
@@ -248,15 +277,7 @@ _c.component = function(obj) {
       ComponentModel = _.extend(ComponentModel, listen);
     }
 
-    var exposedCollection;
-
-    if(collection) {
-      exposedCollection = Backbone.Collection.extend({
-        model: model
-      });
-    }
-
-    createComponent(componentName , model, view, exposedCollection);
+    createComponent(componentName , model, view, collection);
 };
 
 /**
@@ -351,9 +372,13 @@ var parseDom = function() {
 };
 
 var buildInitialValues = function(id, config) {
-  return _.find(config, function (conf) {
+  var control = _.find(config, function (conf) {
     return conf.id === id;
-  }).data;
+  });
+  if(control) {
+    return control.data;
+  }
+  return { }; 
 };
 
 var parseApp = function(controls) {
@@ -383,18 +408,30 @@ var loadBusinessScript = function (mainModule) {
 var exposedComponent = function(control, initValues, module) {
   var component = _c.components[control.type] || undefined,
       model,
+      collection,
       view;
+
   if(component) {
-    model = new component.model(initValues);
-    view = new component.view({ model: model, el: "." + control.id });
+    if(component.model) {
+      model = new component.model(initValues);
+    } else {
+      model = new ComponentModel(initValues);
+    }
+
+    if(component.collection) {
+      collection = new component.collection();
+    } else {
+      collection = undefined;
+    }
+    view = new component.view({ model: model, el: "." + control.id, collection: collection });
   } else {
     //try to create based html
     model = new ComponentModel(initValues);
     view = new ComponentView({ model: model, el: "." + control.id });
   }
   _c.controls = _c.controls || [];
-  _c.controls.push({ id: control.key, model: model, view: view });
-  module.add(control.key, model);
+  _c.controls.push({ id: control.key, model: model, view: view, collection: collection });
+  module.add(control.key, model, collection);
 
 };
 
