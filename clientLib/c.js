@@ -70,7 +70,22 @@ _c.setEngine = function(tmplEngine) {
 var modules = {};
 
 _c.define = function(name, content) {
-  content.call(modules[name], Backbone);
+  var module;
+
+  if(!content) {
+    content = name;
+    module = modules["main"];
+  } else {
+    module = modules[name]
+  }
+
+  if(_.isFunction(content)) {
+    return content.call(module, Backbone, _);
+  }
+  if(_.isObject(content)) {
+    module = _.extend(module, content);
+    module.initialize(Backbone, _);
+  };
 };
 /**
  * Rivets adapters
