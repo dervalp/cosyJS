@@ -109,16 +109,20 @@ if(isBrowser) {
   });
 
   rivets.config.handler = function(context, ev, bindings) {
+    var key = bindings.key,
+        keypath = bindings.keypath,
+        models = bindings.view.models;
+
     if(key === "model") {
-      return bindings.model[bindings.keypath].call(bindings.model, ev);
+      return models.model[keypath].call(models.model, ev);
     } else if (key === "view") {
-      return bindings.view[bindings.keypath].call(bindings.view, ev);
+      return models.view[keypath].call(models.view, ev);
     } else if (key === "module") {
-      return bindings.view.module[bindings.keypath].call(bindings.view.module, ev);
+      return models.view.module[keypath].call(models.view.module, ev);
     } else {
       throw "no handler found";
     }
-  };
+  }; 
 }
 
 

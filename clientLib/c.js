@@ -110,16 +110,20 @@ if(isBrowser) {
   });
 
   rivets.config.handler = function(context, ev, bindings) {
+    var key = bindings.key,
+        keypath = bindings.keypath,
+        models = bindings.view.models;
+
     if(key === "model") {
-      return bindings.model[bindings.keypath].call(bindings.model, ev);
+      return models.model[keypath].call(models.model, ev);
     } else if (key === "view") {
-      return bindings.view[bindings.keypath].call(bindings.view, ev);
+      return models.view[keypath].call(models.view, ev);
     } else if (key === "module") {
-      return bindings.view.module[bindings.keypath].call(bindings.view.module, ev);
+      return models.view.module[keypath].call(models.view.module, ev);
     } else {
       throw "no handler found";
     }
-  };
+  }; 
 }
 
 
@@ -462,7 +466,7 @@ if(isBrowser) {
 }
 
 }).call(this);
-},{"Backbone":2,"Handlebars":3,"rivets":4,"underscore":5}],4:[function(require,module,exports){
+},{"rivets":2,"Backbone":3,"Handlebars":4,"underscore":5}],2:[function(require,module,exports){
 // Rivets.js
 // version: 0.5.7
 // author: Michael Richards
@@ -2505,52 +2509,7 @@ if(isBrowser) {
 },{}],6:[function(require,module,exports){
 // nothing to see here... no file methods for the browser
 
-},{}],3:[function(require,module,exports){
-var handlebars = require("./handlebars/base"),
-
-// Each of these augment the Handlebars object. No need to setup here.
-// (This is done to easily share code between commonjs and browse envs)
-  utils = require("./handlebars/utils"),
-  compiler = require("./handlebars/compiler"),
-  runtime = require("./handlebars/runtime");
-
-var create = function() {
-  var hb = handlebars.create();
-
-  utils.attach(hb);
-  compiler.attach(hb);
-  runtime.attach(hb);
-
-  return hb;
-};
-
-var Handlebars = create();
-Handlebars.create = create;
-
-module.exports = Handlebars; // instantiate an instance
-
-// Publish a Node.js require() handler for .handlebars and .hbs files
-if (require.extensions) {
-  var extension = function(module, filename) {
-    var fs = require("fs");
-    var templateString = fs.readFileSync(filename, "utf8");
-    module.exports = Handlebars.compile(templateString);
-  };
-  require.extensions[".handlebars"] = extension;
-  require.extensions[".hbs"] = extension;
-}
-
-// BEGIN(BROWSER)
-
-// END(BROWSER)
-
-// USAGE:
-// var handlebars = require('handlebars');
-
-// var singleton = handlebars.Handlebars,
-//  local = handlebars.create();
-
-},{"fs":6,"./handlebars/base":7,"./handlebars/utils":8,"./handlebars/runtime":9,"./handlebars/compiler":10}],8:[function(require,module,exports){
+},{}],7:[function(require,module,exports){
 exports.attach = function(Handlebars) {
 
 var toString = Object.prototype.toString;
@@ -2635,7 +2594,160 @@ Handlebars.Utils = {
 return Handlebars;
 };
 
-},{}],2:[function(require,module,exports){
+},{}],4:[function(require,module,exports){
+var handlebars = require("./handlebars/base"),
+
+// Each of these augment the Handlebars object. No need to setup here.
+// (This is done to easily share code between commonjs and browse envs)
+  utils = require("./handlebars/utils"),
+  compiler = require("./handlebars/compiler"),
+  runtime = require("./handlebars/runtime");
+
+var create = function() {
+  var hb = handlebars.create();
+
+  utils.attach(hb);
+  compiler.attach(hb);
+  runtime.attach(hb);
+
+  return hb;
+};
+
+var Handlebars = create();
+Handlebars.create = create;
+
+module.exports = Handlebars; // instantiate an instance
+
+// Publish a Node.js require() handler for .handlebars and .hbs files
+if (require.extensions) {
+  var extension = function(module, filename) {
+    var fs = require("fs");
+    var templateString = fs.readFileSync(filename, "utf8");
+    module.exports = Handlebars.compile(templateString);
+  };
+  require.extensions[".handlebars"] = extension;
+  require.extensions[".hbs"] = extension;
+}
+
+// BEGIN(BROWSER)
+
+// END(BROWSER)
+
+// USAGE:
+// var handlebars = require('handlebars');
+
+// var singleton = handlebars.Handlebars,
+//  local = handlebars.create();
+
+},{"fs":6,"./handlebars/base":8,"./handlebars/utils":7,"./handlebars/runtime":9,"./handlebars/compiler":10}],9:[function(require,module,exports){
+exports.attach = function(Handlebars) {
+
+// BEGIN(BROWSER)
+
+Handlebars.VM = {
+  template: function(templateSpec) {
+    // Just add water
+    var container = {
+      escapeExpression: Handlebars.Utils.escapeExpression,
+      invokePartial: Handlebars.VM.invokePartial,
+      programs: [],
+      program: function(i, fn, data) {
+        var programWrapper = this.programs[i];
+        if(data) {
+          programWrapper = Handlebars.VM.program(i, fn, data);
+        } else if (!programWrapper) {
+          programWrapper = this.programs[i] = Handlebars.VM.program(i, fn);
+        }
+        return programWrapper;
+      },
+      merge: function(param, common) {
+        var ret = param || common;
+
+        if (param && common) {
+          ret = {};
+          Handlebars.Utils.extend(ret, common);
+          Handlebars.Utils.extend(ret, param);
+        }
+        return ret;
+      },
+      programWithDepth: Handlebars.VM.programWithDepth,
+      noop: Handlebars.VM.noop,
+      compilerInfo: null
+    };
+
+    return function(context, options) {
+      options = options || {};
+      var result = templateSpec.call(container, Handlebars, context, options.helpers, options.partials, options.data);
+
+      var compilerInfo = container.compilerInfo || [],
+          compilerRevision = compilerInfo[0] || 1,
+          currentRevision = Handlebars.COMPILER_REVISION;
+
+      if (compilerRevision !== currentRevision) {
+        if (compilerRevision < currentRevision) {
+          var runtimeVersions = Handlebars.REVISION_CHANGES[currentRevision],
+              compilerVersions = Handlebars.REVISION_CHANGES[compilerRevision];
+          throw "Template was precompiled with an older version of Handlebars than the current runtime. "+
+                "Please update your precompiler to a newer version ("+runtimeVersions+") or downgrade your runtime to an older version ("+compilerVersions+").";
+        } else {
+          // Use the embedded version info since the runtime doesn't know about this revision yet
+          throw "Template was precompiled with a newer version of Handlebars than the current runtime. "+
+                "Please update your runtime to a newer version ("+compilerInfo[1]+").";
+        }
+      }
+
+      return result;
+    };
+  },
+
+  programWithDepth: function(i, fn, data /*, $depth */) {
+    var args = Array.prototype.slice.call(arguments, 3);
+
+    var program = function(context, options) {
+      options = options || {};
+
+      return fn.apply(this, [context, options.data || data].concat(args));
+    };
+    program.program = i;
+    program.depth = args.length;
+    return program;
+  },
+  program: function(i, fn, data) {
+    var program = function(context, options) {
+      options = options || {};
+
+      return fn(context, options.data || data);
+    };
+    program.program = i;
+    program.depth = 0;
+    return program;
+  },
+  noop: function() { return ""; },
+  invokePartial: function(partial, name, context, helpers, partials, data) {
+    var options = { helpers: helpers, partials: partials, data: data };
+
+    if(partial === undefined) {
+      throw new Handlebars.Exception("The partial " + name + " could not be found");
+    } else if(partial instanceof Function) {
+      return partial(context, options);
+    } else if (!Handlebars.compile) {
+      throw new Handlebars.Exception("The partial " + name + " could not be compiled when running in runtime-only mode");
+    } else {
+      partials[name] = Handlebars.compile(partial, {data: data !== undefined});
+      return partials[name](context, options);
+    }
+  }
+};
+
+Handlebars.template = Handlebars.VM.template;
+
+// END(BROWSER)
+
+return Handlebars;
+
+};
+
+},{}],3:[function(require,module,exports){
 (function(){//     Backbone.js 1.0.0
 
 //     (c) 2010-2013 Jeremy Ashkenas, DocumentCloud Inc.
@@ -4209,7 +4321,7 @@ return Handlebars;
 }).call(this);
 
 })()
-},{"underscore":11}],7:[function(require,module,exports){
+},{"underscore":11}],8:[function(require,module,exports){
 /*jshint eqnull: true */
 
 module.exports.create = function() {
@@ -4375,114 +4487,6 @@ Handlebars.registerHelper('log', function(context, options) {
 // END(BROWSER)
 
 return Handlebars;
-};
-
-},{}],9:[function(require,module,exports){
-exports.attach = function(Handlebars) {
-
-// BEGIN(BROWSER)
-
-Handlebars.VM = {
-  template: function(templateSpec) {
-    // Just add water
-    var container = {
-      escapeExpression: Handlebars.Utils.escapeExpression,
-      invokePartial: Handlebars.VM.invokePartial,
-      programs: [],
-      program: function(i, fn, data) {
-        var programWrapper = this.programs[i];
-        if(data) {
-          programWrapper = Handlebars.VM.program(i, fn, data);
-        } else if (!programWrapper) {
-          programWrapper = this.programs[i] = Handlebars.VM.program(i, fn);
-        }
-        return programWrapper;
-      },
-      merge: function(param, common) {
-        var ret = param || common;
-
-        if (param && common) {
-          ret = {};
-          Handlebars.Utils.extend(ret, common);
-          Handlebars.Utils.extend(ret, param);
-        }
-        return ret;
-      },
-      programWithDepth: Handlebars.VM.programWithDepth,
-      noop: Handlebars.VM.noop,
-      compilerInfo: null
-    };
-
-    return function(context, options) {
-      options = options || {};
-      var result = templateSpec.call(container, Handlebars, context, options.helpers, options.partials, options.data);
-
-      var compilerInfo = container.compilerInfo || [],
-          compilerRevision = compilerInfo[0] || 1,
-          currentRevision = Handlebars.COMPILER_REVISION;
-
-      if (compilerRevision !== currentRevision) {
-        if (compilerRevision < currentRevision) {
-          var runtimeVersions = Handlebars.REVISION_CHANGES[currentRevision],
-              compilerVersions = Handlebars.REVISION_CHANGES[compilerRevision];
-          throw "Template was precompiled with an older version of Handlebars than the current runtime. "+
-                "Please update your precompiler to a newer version ("+runtimeVersions+") or downgrade your runtime to an older version ("+compilerVersions+").";
-        } else {
-          // Use the embedded version info since the runtime doesn't know about this revision yet
-          throw "Template was precompiled with a newer version of Handlebars than the current runtime. "+
-                "Please update your runtime to a newer version ("+compilerInfo[1]+").";
-        }
-      }
-
-      return result;
-    };
-  },
-
-  programWithDepth: function(i, fn, data /*, $depth */) {
-    var args = Array.prototype.slice.call(arguments, 3);
-
-    var program = function(context, options) {
-      options = options || {};
-
-      return fn.apply(this, [context, options.data || data].concat(args));
-    };
-    program.program = i;
-    program.depth = args.length;
-    return program;
-  },
-  program: function(i, fn, data) {
-    var program = function(context, options) {
-      options = options || {};
-
-      return fn(context, options.data || data);
-    };
-    program.program = i;
-    program.depth = 0;
-    return program;
-  },
-  noop: function() { return ""; },
-  invokePartial: function(partial, name, context, helpers, partials, data) {
-    var options = { helpers: helpers, partials: partials, data: data };
-
-    if(partial === undefined) {
-      throw new Handlebars.Exception("The partial " + name + " could not be found");
-    } else if(partial instanceof Function) {
-      return partial(context, options);
-    } else if (!Handlebars.compile) {
-      throw new Handlebars.Exception("The partial " + name + " could not be compiled when running in runtime-only mode");
-    } else {
-      partials[name] = Handlebars.compile(partial, {data: data !== undefined});
-      return partials[name](context, options);
-    }
-  }
-};
-
-Handlebars.template = Handlebars.VM.template;
-
-// END(BROWSER)
-
-return Handlebars;
-
 };
 
 },{}],11:[function(require,module,exports){
@@ -5732,7 +5736,7 @@ return Handlebars;
 
 };
 
-},{"./visitor":12,"./ast":13,"./printer":14,"./compiler":15}],12:[function(require,module,exports){
+},{"./printer":12,"./ast":13,"./compiler":14,"./visitor":15}],15:[function(require,module,exports){
 exports.attach = function(Handlebars) {
 
 // BEGIN(BROWSER)
@@ -5892,7 +5896,7 @@ return Handlebars;
 };
 
 
-},{}],14:[function(require,module,exports){
+},{}],12:[function(require,module,exports){
 exports.attach = function(Handlebars) {
 
 // BEGIN(BROWSER)
@@ -6032,7 +6036,7 @@ return Handlebars;
 };
 
 
-},{}],15:[function(require,module,exports){
+},{}],14:[function(require,module,exports){
 var compilerbase = require("./base");
 
 exports.attach = function(Handlebars) {
