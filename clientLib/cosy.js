@@ -339,7 +339,7 @@ var scriptLoadError = function() {
 };
 var buildModRequest = function(modulesElem) {
     var allScript = modulesElem,
-        request = __domain + "/load/comp?mod=[",
+        request = "/load/comp?mod=[",
         end = "]",
         mod = [];
 
