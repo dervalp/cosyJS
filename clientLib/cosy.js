@@ -44,7 +44,7 @@ var templateEngine = function() {
   var cache = {};
 
   return {
-    get: function(path, cb) {
+    get: function(path, isInstance, cb) {
       var template = cache[path];
       if(!template) {
         Backbone.$.get("template/" + path, function(data) {
@@ -135,11 +135,14 @@ var ComponentView = _c.View = Backbone.View.extend({
     var self = this,
         template = this.template || this.model.get("type") || undefined;
 
-    _c.templateEngine.get(template, function(tmpl) {
+    _c.templateEngine.get(template, this.model.get("isInstance"), function(tmpl) {
       var html = tmpl(self.model.toJSON());
       if(isBrowser) {
         self.$el.html(html);
+        self.bindings.unbind();
         self.bindings.build();
+        self.bindings.bind();
+        self.bindings.sync();
         if(cb) {
           cb(html);
         }
