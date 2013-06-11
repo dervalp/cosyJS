@@ -1,4 +1,4 @@
-var Backbone = require("Backbone"),
+var Backbone = require("backbone"),
     rivets = require("rivets"),
     tmplSystem = require("Handlebars"),
     _ = require("underscore");

@@ -1,5 +1,5 @@
 ;(function(e,t,n){function i(n,s){if(!t[n]){if(!e[n]){var o=typeof require=="function"&&require;if(!s&&o)return o(n,!0);if(r)return r(n,!0);throw new Error("Cannot find module '"+n+"'")}var u=t[n]={exports:{}};e[n][0].call(u.exports,function(t){var r=e[n][1][t];return i(r?r:t)},u,u.exports)}return t[n].exports}var r=typeof require=="function"&&require;for(var s=0;s<n.length;s++)i(n[s]);return i})({1:[function(require,module,exports){
-var Backbone = require("Backbone"),
+var Backbone = require("backbone"),
     rivets = require("rivets"),
     tmplSystem = require("Handlebars"),
     _ = require("underscore");
@@ -468,7 +468,7 @@ if(isBrowser) {
 }
 
 }).call(this);
-},{"Handlebars":2,"Backbone":3,"underscore":4,"rivets":5}],4:[function(require,module,exports){
+},{"Handlebars":2,"rivets":3,"underscore":4,"backbone":5}],4:[function(require,module,exports){
 (function(){//     Underscore.js 1.4.4
 //     http://underscorejs.org
 //     (c) 2009-2013 Jeremy Ashkenas, DocumentCloud Inc.
@@ -1697,7 +1697,7 @@ if(isBrowser) {
 }).call(this);
 
 })()
-},{}],5:[function(require,module,exports){
+},{}],3:[function(require,module,exports){
 // Rivets.js
 // version: 0.5.7
 // author: Michael Richards
@@ -2511,6 +2511,91 @@ if(isBrowser) {
 },{}],6:[function(require,module,exports){
 // nothing to see here... no file methods for the browser
 
+},{}],7:[function(require,module,exports){
+exports.attach = function(Handlebars) {
+
+var toString = Object.prototype.toString;
+
+// BEGIN(BROWSER)
+
+var errorProps = ['description', 'fileName', 'lineNumber', 'message', 'name', 'number', 'stack'];
+
+Handlebars.Exception = function(message) {
+  var tmp = Error.prototype.constructor.apply(this, arguments);
+
+  // Unfortunately errors are not enumerable in Chrome (at least), so `for prop in tmp` doesn't work.
+  for (var idx = 0; idx < errorProps.length; idx++) {
+    this[errorProps[idx]] = tmp[errorProps[idx]];
+  }
+};
+Handlebars.Exception.prototype = new Error();
+
+// Build out our basic SafeString type
+Handlebars.SafeString = function(string) {
+  this.string = string;
+};
+Handlebars.SafeString.prototype.toString = function() {
+  return this.string.toString();
+};
+
+var escape = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#x27;",
+  "`": "&#x60;"
+};
+
+var badChars = /[&<>"'`]/g;
+var possible = /[&<>"'`]/;
+
+var escapeChar = function(chr) {
+  return escape[chr] || "&amp;";
+};
+
+Handlebars.Utils = {
+  extend: function(obj, value) {
+    for(var key in value) {
+      if(value.hasOwnProperty(key)) {
+        obj[key] = value[key];
+      }
+    }
+  },
+
+  escapeExpression: function(string) {
+    // don't escape SafeStrings, since they're already safe
+    if (string instanceof Handlebars.SafeString) {
+      return string.toString();
+    } else if (string == null || string === false) {
+      return "";
+    }
+
+    // Force a string conversion as this will be done by the append regardless and
+    // the regex test will do this transparently behind the scenes, causing issues if
+    // an object's to string has escaped characters in it.
+    string = string.toString();
+
+    if(!possible.test(string)) { return string; }
+    return string.replace(badChars, escapeChar);
+  },
+
+  isEmpty: function(value) {
+    if (!value && value !== 0) {
+      return true;
+    } else if(toString.call(value) === "[object Array]" && value.length === 0) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+};
+
+// END(BROWSER)
+
+return Handlebars;
+};
+
 },{}],2:[function(require,module,exports){
 var handlebars = require("./handlebars/base"),
 
@@ -2556,7 +2641,115 @@ if (require.extensions) {
 // var singleton = handlebars.Handlebars,
 //  local = handlebars.create();
 
-},{"fs":6,"./handlebars/base":7,"./handlebars/utils":8,"./handlebars/runtime":9,"./handlebars/compiler":10}],7:[function(require,module,exports){
+},{"fs":6,"./handlebars/base":8,"./handlebars/utils":7,"./handlebars/runtime":9,"./handlebars/compiler":10}],9:[function(require,module,exports){
+exports.attach = function(Handlebars) {
+
+// BEGIN(BROWSER)
+
+Handlebars.VM = {
+  template: function(templateSpec) {
+    // Just add water
+    var container = {
+      escapeExpression: Handlebars.Utils.escapeExpression,
+      invokePartial: Handlebars.VM.invokePartial,
+      programs: [],
+      program: function(i, fn, data) {
+        var programWrapper = this.programs[i];
+        if(data) {
+          programWrapper = Handlebars.VM.program(i, fn, data);
+        } else if (!programWrapper) {
+          programWrapper = this.programs[i] = Handlebars.VM.program(i, fn);
+        }
+        return programWrapper;
+      },
+      merge: function(param, common) {
+        var ret = param || common;
+
+        if (param && common) {
+          ret = {};
+          Handlebars.Utils.extend(ret, common);
+          Handlebars.Utils.extend(ret, param);
+        }
+        return ret;
+      },
+      programWithDepth: Handlebars.VM.programWithDepth,
+      noop: Handlebars.VM.noop,
+      compilerInfo: null
+    };
+
+    return function(context, options) {
+      options = options || {};
+      var result = templateSpec.call(container, Handlebars, context, options.helpers, options.partials, options.data);
+
+      var compilerInfo = container.compilerInfo || [],
+          compilerRevision = compilerInfo[0] || 1,
+          currentRevision = Handlebars.COMPILER_REVISION;
+
+      if (compilerRevision !== currentRevision) {
+        if (compilerRevision < currentRevision) {
+          var runtimeVersions = Handlebars.REVISION_CHANGES[currentRevision],
+              compilerVersions = Handlebars.REVISION_CHANGES[compilerRevision];
+          throw "Template was precompiled with an older version of Handlebars than the current runtime. "+
+                "Please update your precompiler to a newer version ("+runtimeVersions+") or downgrade your runtime to an older version ("+compilerVersions+").";
+        } else {
+          // Use the embedded version info since the runtime doesn't know about this revision yet
+          throw "Template was precompiled with a newer version of Handlebars than the current runtime. "+
+                "Please update your runtime to a newer version ("+compilerInfo[1]+").";
+        }
+      }
+
+      return result;
+    };
+  },
+
+  programWithDepth: function(i, fn, data /*, $depth */) {
+    var args = Array.prototype.slice.call(arguments, 3);
+
+    var program = function(context, options) {
+      options = options || {};
+
+      return fn.apply(this, [context, options.data || data].concat(args));
+    };
+    program.program = i;
+    program.depth = args.length;
+    return program;
+  },
+  program: function(i, fn, data) {
+    var program = function(context, options) {
+      options = options || {};
+
+      return fn(context, options.data || data);
+    };
+    program.program = i;
+    program.depth = 0;
+    return program;
+  },
+  noop: function() { return ""; },
+  invokePartial: function(partial, name, context, helpers, partials, data) {
+    var options = { helpers: helpers, partials: partials, data: data };
+
+    if(partial === undefined) {
+      throw new Handlebars.Exception("The partial " + name + " could not be found");
+    } else if(partial instanceof Function) {
+      return partial(context, options);
+    } else if (!Handlebars.compile) {
+      throw new Handlebars.Exception("The partial " + name + " could not be compiled when running in runtime-only mode");
+    } else {
+      partials[name] = Handlebars.compile(partial, {data: data !== undefined});
+      return partials[name](context, options);
+    }
+  }
+};
+
+Handlebars.template = Handlebars.VM.template;
+
+// END(BROWSER)
+
+return Handlebars;
+
+};
+
+},{}],8:[function(require,module,exports){
 /*jshint eqnull: true */
 
 module.exports.create = function() {
@@ -2724,200 +2917,7 @@ Handlebars.registerHelper('log', function(context, options) {
 return Handlebars;
 };
 
-},{}],8:[function(require,module,exports){
-exports.attach = function(Handlebars) {
-
-var toString = Object.prototype.toString;
-
-// BEGIN(BROWSER)
-
-var errorProps = ['description', 'fileName', 'lineNumber', 'message', 'name', 'number', 'stack'];
-
-Handlebars.Exception = function(message) {
-  var tmp = Error.prototype.constructor.apply(this, arguments);
-
-  // Unfortunately errors are not enumerable in Chrome (at least), so `for prop in tmp` doesn't work.
-  for (var idx = 0; idx < errorProps.length; idx++) {
-    this[errorProps[idx]] = tmp[errorProps[idx]];
-  }
-};
-Handlebars.Exception.prototype = new Error();
-
-// Build out our basic SafeString type
-Handlebars.SafeString = function(string) {
-  this.string = string;
-};
-Handlebars.SafeString.prototype.toString = function() {
-  return this.string.toString();
-};
-
-var escape = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-  "'": "&#x27;",
-  "`": "&#x60;"
-};
-
-var badChars = /[&<>"'`]/g;
-var possible = /[&<>"'`]/;
-
-var escapeChar = function(chr) {
-  return escape[chr] || "&amp;";
-};
-
-Handlebars.Utils = {
-  extend: function(obj, value) {
-    for(var key in value) {
-      if(value.hasOwnProperty(key)) {
-        obj[key] = value[key];
-      }
-    }
-  },
-
-  escapeExpression: function(string) {
-    // don't escape SafeStrings, since they're already safe
-    if (string instanceof Handlebars.SafeString) {
-      return string.toString();
-    } else if (string == null || string === false) {
-      return "";
-    }
-
-    // Force a string conversion as this will be done by the append regardless and
-    // the regex test will do this transparently behind the scenes, causing issues if
-    // an object's to string has escaped characters in it.
-    string = string.toString();
-
-    if(!possible.test(string)) { return string; }
-    return string.replace(badChars, escapeChar);
-  },
-
-  isEmpty: function(value) {
-    if (!value && value !== 0) {
-      return true;
-    } else if(toString.call(value) === "[object Array]" && value.length === 0) {
-      return true;
-    } else {
-      return false;
-    }
-  }
-};
-
-// END(BROWSER)
-
-return Handlebars;
-};
-
-},{}],9:[function(require,module,exports){
-exports.attach = function(Handlebars) {
-
-// BEGIN(BROWSER)
-
-Handlebars.VM = {
-  template: function(templateSpec) {
-    // Just add water
-    var container = {
-      escapeExpression: Handlebars.Utils.escapeExpression,
-      invokePartial: Handlebars.VM.invokePartial,
-      programs: [],
-      program: function(i, fn, data) {
-        var programWrapper = this.programs[i];
-        if(data) {
-          programWrapper = Handlebars.VM.program(i, fn, data);
-        } else if (!programWrapper) {
-          programWrapper = this.programs[i] = Handlebars.VM.program(i, fn);
-        }
-        return programWrapper;
-      },
-      merge: function(param, common) {
-        var ret = param || common;
-
-        if (param && common) {
-          ret = {};
-          Handlebars.Utils.extend(ret, common);
-          Handlebars.Utils.extend(ret, param);
-        }
-        return ret;
-      },
-      programWithDepth: Handlebars.VM.programWithDepth,
-      noop: Handlebars.VM.noop,
-      compilerInfo: null
-    };
-
-    return function(context, options) {
-      options = options || {};
-      var result = templateSpec.call(container, Handlebars, context, options.helpers, options.partials, options.data);
-
-      var compilerInfo = container.compilerInfo || [],
-          compilerRevision = compilerInfo[0] || 1,
-          currentRevision = Handlebars.COMPILER_REVISION;
-
-      if (compilerRevision !== currentRevision) {
-        if (compilerRevision < currentRevision) {
-          var runtimeVersions = Handlebars.REVISION_CHANGES[currentRevision],
-              compilerVersions = Handlebars.REVISION_CHANGES[compilerRevision];
-          throw "Template was precompiled with an older version of Handlebars than the current runtime. "+
-                "Please update your precompiler to a newer version ("+runtimeVersions+") or downgrade your runtime to an older version ("+compilerVersions+").";
-        } else {
-          // Use the embedded version info since the runtime doesn't know about this revision yet
-          throw "Template was precompiled with a newer version of Handlebars than the current runtime. "+
-                "Please update your runtime to a newer version ("+compilerInfo[1]+").";
-        }
-      }
-
-      return result;
-    };
-  },
-
-  programWithDepth: function(i, fn, data /*, $depth */) {
-    var args = Array.prototype.slice.call(arguments, 3);
-
-    var program = function(context, options) {
-      options = options || {};
-
-      return fn.apply(this, [context, options.data || data].concat(args));
-    };
-    program.program = i;
-    program.depth = args.length;
-    return program;
-  },
-  program: function(i, fn, data) {
-    var program = function(context, options) {
-      options = options || {};
-
-      return fn(context, options.data || data);
-    };
-    program.program = i;
-    program.depth = 0;
-    return program;
-  },
-  noop: function() { return ""; },
-  invokePartial: function(partial, name, context, helpers, partials, data) {
-    var options = { helpers: helpers, partials: partials, data: data };
-
-    if(partial === undefined) {
-      throw new Handlebars.Exception("The partial " + name + " could not be found");
-    } else if(partial instanceof Function) {
-      return partial(context, options);
-    } else if (!Handlebars.compile) {
-      throw new Handlebars.Exception("The partial " + name + " could not be compiled when running in runtime-only mode");
-    } else {
-      partials[name] = Handlebars.compile(partial, {data: data !== undefined});
-      return partials[name](context, options);
-    }
-  }
-};
-
-Handlebars.template = Handlebars.VM.template;
-
-// END(BROWSER)
-
-return Handlebars;
-
-};
-
-},{}],3:[function(require,module,exports){
+},{}],5:[function(require,module,exports){
 (function(){//     Backbone.js 1.0.0
 
 //     (c) 2010-2013 Jeremy Ashkenas, DocumentCloud Inc.
@@ -5720,6 +5720,26 @@ return Handlebars;
 }).call(this);
 
 })()
+},{}],12:[function(require,module,exports){
+exports.attach = function(Handlebars) {
+
+// BEGIN(BROWSER)
+
+Handlebars.Visitor = function() {};
+
+Handlebars.Visitor.prototype = {
+  accept: function(object) {
+    return this[object.type](object);
+  }
+};
+
+// END(BROWSER)
+
+return Handlebars;
+};
+
+
+
 },{}],10:[function(require,module,exports){
 // Each of these module will augment the Handlebars object as it loads. No need to perform addition operations
 module.exports.attach = function(Handlebars) {
@@ -5738,24 +5758,144 @@ return Handlebars;
 
 };
 
-},{"./visitor":12,"./printer":13,"./ast":14,"./compiler":15}],12:[function(require,module,exports){
+},{"./visitor":12,"./printer":13,"./ast":14,"./compiler":15}],14:[function(require,module,exports){
 exports.attach = function(Handlebars) {
 
 // BEGIN(BROWSER)
+Handlebars.AST = {};
 
-Handlebars.Visitor = function() {};
+Handlebars.AST.ProgramNode = function(statements, inverse) {
+  this.type = "program";
+  this.statements = statements;
+  if(inverse) { this.inverse = new Handlebars.AST.ProgramNode(inverse); }
+};
 
-Handlebars.Visitor.prototype = {
-  accept: function(object) {
-    return this[object.type](object);
+Handlebars.AST.MustacheNode = function(rawParams, hash, unescaped) {
+  this.type = "mustache";
+  this.escaped = !unescaped;
+  this.hash = hash;
+
+  var id = this.id = rawParams[0];
+  var params = this.params = rawParams.slice(1);
+
+  // a mustache is an eligible helper if:
+  // * its id is simple (a single part, not `this` or `..`)
+  var eligibleHelper = this.eligibleHelper = id.isSimple;
+
+  // a mustache is definitely a helper if:
+  // * it is an eligible helper, and
+  // * it has at least one parameter or hash segment
+  this.isHelper = eligibleHelper && (params.length || hash);
+
+  // if a mustache is an eligible helper but not a definite
+  // helper, it is ambiguous, and will be resolved in a later
+  // pass or at runtime.
+};
+
+Handlebars.AST.PartialNode = function(partialName, context) {
+  this.type         = "partial";
+  this.partialName  = partialName;
+  this.context      = context;
+};
+
+Handlebars.AST.BlockNode = function(mustache, program, inverse, close) {
+  var verifyMatch = function(open, close) {
+    if(open.original !== close.original) {
+      throw new Handlebars.Exception(open.original + " doesn't match " + close.original);
+    }
+  };
+
+  verifyMatch(mustache.id, close);
+  this.type = "block";
+  this.mustache = mustache;
+  this.program  = program;
+  this.inverse  = inverse;
+
+  if (this.inverse && !this.program) {
+    this.isInverse = true;
   }
+};
+
+Handlebars.AST.ContentNode = function(string) {
+  this.type = "content";
+  this.string = string;
+};
+
+Handlebars.AST.HashNode = function(pairs) {
+  this.type = "hash";
+  this.pairs = pairs;
+};
+
+Handlebars.AST.IdNode = function(parts) {
+  this.type = "ID";
+
+  var original = "",
+      dig = [],
+      depth = 0;
+
+  for(var i=0,l=parts.length; i<l; i++) {
+    var part = parts[i].part;
+    original += (parts[i].separator || '') + part;
+
+    if (part === ".." || part === "." || part === "this") {
+      if (dig.length > 0) { throw new Handlebars.Exception("Invalid path: " + original); }
+      else if (part === "..") { depth++; }
+      else { this.isScoped = true; }
+    }
+    else { dig.push(part); }
+  }
+
+  this.original = original;
+  this.parts    = dig;
+  this.string   = dig.join('.');
+  this.depth    = depth;
+
+  // an ID is simple if it only has one part, and that part is not
+  // `..` or `this`.
+  this.isSimple = parts.length === 1 && !this.isScoped && depth === 0;
+
+  this.stringModeValue = this.string;
+};
+
+Handlebars.AST.PartialNameNode = function(name) {
+  this.type = "PARTIAL_NAME";
+  this.name = name.original;
+};
+
+Handlebars.AST.DataNode = function(id) {
+  this.type = "DATA";
+  this.id = id;
+};
+
+Handlebars.AST.StringNode = function(string) {
+  this.type = "STRING";
+  this.original =
+    this.string =
+    this.stringModeValue = string;
+};
+
+Handlebars.AST.IntegerNode = function(integer) {
+  this.type = "INTEGER";
+  this.original =
+    this.integer = integer;
+  this.stringModeValue = Number(integer);
+};
+
+Handlebars.AST.BooleanNode = function(bool) {
+  this.type = "BOOLEAN";
+  this.bool = bool;
+  this.stringModeValue = bool === "true";
+};
+
+Handlebars.AST.CommentNode = function(comment) {
+  this.type = "comment";
+  this.comment = comment;
 };
 
 // END(BROWSER)
 
 return Handlebars;
 };
-
 
 
 },{}],13:[function(require,module,exports){
@@ -5892,146 +6032,6 @@ Handlebars.PrintVisitor.prototype.content = function(content) {
 Handlebars.PrintVisitor.prototype.comment = function(comment) {
   return this.pad("{{! '" + comment.comment + "' }}");
 };
-// END(BROWSER)
-
-return Handlebars;
-};
-
-
-},{}],14:[function(require,module,exports){
-exports.attach = function(Handlebars) {
-
-// BEGIN(BROWSER)
-Handlebars.AST = {};
-
-Handlebars.AST.ProgramNode = function(statements, inverse) {
-  this.type = "program";
-  this.statements = statements;
-  if(inverse) { this.inverse = new Handlebars.AST.ProgramNode(inverse); }
-};
-
-Handlebars.AST.MustacheNode = function(rawParams, hash, unescaped) {
-  this.type = "mustache";
-  this.escaped = !unescaped;
-  this.hash = hash;
-
-  var id = this.id = rawParams[0];
-  var params = this.params = rawParams.slice(1);
-
-  // a mustache is an eligible helper if:
-  // * its id is simple (a single part, not `this` or `..`)
-  var eligibleHelper = this.eligibleHelper = id.isSimple;
-
-  // a mustache is definitely a helper if:
-  // * it is an eligible helper, and
-  // * it has at least one parameter or hash segment
-  this.isHelper = eligibleHelper && (params.length || hash);
-
-  // if a mustache is an eligible helper but not a definite
-  // helper, it is ambiguous, and will be resolved in a later
-  // pass or at runtime.
-};
-
-Handlebars.AST.PartialNode = function(partialName, context) {
-  this.type         = "partial";
-  this.partialName  = partialName;
-  this.context      = context;
-};
-
-Handlebars.AST.BlockNode = function(mustache, program, inverse, close) {
-  var verifyMatch = function(open, close) {
-    if(open.original !== close.original) {
-      throw new Handlebars.Exception(open.original + " doesn't match " + close.original);
-    }
-  };
-
-  verifyMatch(mustache.id, close);
-  this.type = "block";
-  this.mustache = mustache;
-  this.program  = program;
-  this.inverse  = inverse;
-
-  if (this.inverse && !this.program) {
-    this.isInverse = true;
-  }
-};
-
-Handlebars.AST.ContentNode = function(string) {
-  this.type = "content";
-  this.string = string;
-};
-
-Handlebars.AST.HashNode = function(pairs) {
-  this.type = "hash";
-  this.pairs = pairs;
-};
-
-Handlebars.AST.IdNode = function(parts) {
-  this.type = "ID";
-
-  var original = "",
-      dig = [],
-      depth = 0;
-
-  for(var i=0,l=parts.length; i<l; i++) {
-    var part = parts[i].part;
-    original += (parts[i].separator || '') + part;
-
-    if (part === ".." || part === "." || part === "this") {
-      if (dig.length > 0) { throw new Handlebars.Exception("Invalid path: " + original); }
-      else if (part === "..") { depth++; }
-      else { this.isScoped = true; }
-    }
-    else { dig.push(part); }
-  }
-
-  this.original = original;
-  this.parts    = dig;
-  this.string   = dig.join('.');
-  this.depth    = depth;
-
-  // an ID is simple if it only has one part, and that part is not
-  // `..` or `this`.
-  this.isSimple = parts.length === 1 && !this.isScoped && depth === 0;
-
-  this.stringModeValue = this.string;
-};
-
-Handlebars.AST.PartialNameNode = function(name) {
-  this.type = "PARTIAL_NAME";
-  this.name = name.original;
-};
-
-Handlebars.AST.DataNode = function(id) {
-  this.type = "DATA";
-  this.id = id;
-};
-
-Handlebars.AST.StringNode = function(string) {
-  this.type = "STRING";
-  this.original =
-    this.string =
-    this.stringModeValue = string;
-};
-
-Handlebars.AST.IntegerNode = function(integer) {
-  this.type = "INTEGER";
-  this.original =
-    this.integer = integer;
-  this.stringModeValue = Number(integer);
-};
-
-Handlebars.AST.BooleanNode = function(bool) {
-  this.type = "BOOLEAN";
-  this.bool = bool;
-  this.stringModeValue = bool === "true";
-};
-
-Handlebars.AST.CommentNode = function(comment) {
-  this.type = "comment";
-  this.comment = comment;
-};
-
 // END(BROWSER)
 
 return Handlebars;
