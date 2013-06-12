@@ -13,9 +13,11 @@ color: #10a3d5;
 }
 h2 {
 color: #f14581;
+font-weight: normal;
 }
 h3 {
 margin: 0 0 .5em;
+font-weight: normal;
 color: #4f4f51;
 font-size: 1.25em;
 }
@@ -144,4 +146,7 @@ font-size: .875em;
   padding-top:20px;
   height: 77px;
   width:auto;
+}
+a:hover {
+text-decoration: underline;
 }
