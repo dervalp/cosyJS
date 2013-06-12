@@ -7,7 +7,7 @@ Full stack UI component library and layout generator
 
 **cosyJS is still experimental and should not be used for production environment**
 
-The idea is to provide you out of the box a node.js server which manage all your static files (stylesheets, javascript templates, javascript lib,...).
+The idea is to provide you out of the box a node.js server (express currently) which manage all your static files (stylesheets, javascript templates, javascript lib,...).
 
 cosyJS has also some nice features out of the box like:
 
@@ -17,11 +17,11 @@ cosyJS has also some nice features out of the box like:
 
 ## Demo
 
-You can find an implementation of a the well know [Todo app](https://github.com/dervalp/cosyJS-todo) using cosyJS.
+You can find an implementation of a the well know [Todo app](https://github.com/dervalp/cosyJS-todo) using cosyJS and [their implementation](http://cosytodo.herokuapp.com/).
 
-## Try it and give feedback
+## Try it and give feedbacks
 
-This is published mainly to give the possibility to try cosy and give me feedback. Do not use this in a production environment. This is still experimental.
+This is published mainly to give the possibility to try cosy and give me feedbacks. Please, do not use this in a production environment.
 
 ```javascript
 npm install cosy
@@ -29,13 +29,11 @@ npm install cosy
 
 ## Shared Templates
 
-The idea behind cosy is to shared the Templates you use to render your data between client-side and server-side. cosyJS expect an Express (or at least connect) server.
+The idea behind cosy is to shared the templates you use to render your data between client-side and server-side.
 
 ## Work in progress
 
-This is still currenly in development but you are free to collaborate on the project.
-
-Here is a list of task you could do:
+Here is a list of task you could collaborate:
 
 * Create new full-stack components
 * Improve performance
@@ -59,13 +57,13 @@ Right now Cosy required an express instance in order to work, here is the code t
 ```
 ##The Component
 
-By using node.js we are able to run the same code client and server side and cosy tries to take this to its advantage and allows you to share lots of code between them.
+By using node.js we are able to run the same code client and server side. Cosy tries to take this to its advantage and allows you to share lots of code between them.
 
-A component needs 2 things in order to work, the definition and the template.
+A component needs 1 things in order to work, a javascript definition or a template.
 
 **The definition**
 
-It is there where you will put the logic of your component. This component is a wrapper for a Backbone.Model anb a Backbone.View. So you can use all the backbone syntax in it.
+The place where you will put the logic of your component. This component is a wrapper for a Backbone.Model anb a Backbone.View. So you can use all the backbone syntax in it.
 
 A basic component definion:
 
@@ -83,7 +81,7 @@ _c.component({
 
 **The template**
 
-The template uses handlbar (client/server) syntax to produce the HTML.
+The template uses handlbar syntax (client/server) to produce the HTML.
 
 Here is a template for the "basicComponent" above:
 
@@ -92,6 +90,17 @@ Here is a template for the "basicComponent" above:
   <button class="someClass">Do Something</button>
 </div>
 ```
+
+In order to register a component which has only a template, all you need is to defined a type and an id. The type will be the "Klass" of the component, on the other the ID will be used to access your component on client side.
+
+```html
+<div cosy-type="AComponent" cosy-id="{{id}}">
+  <button class="someClass">Do Something</button>
+</div>
+```
+
+This code will register this template (without having a javascript file). The type of this new component will be "AComponent".
+
 ##The layout
 
 When you have some components, you now need to add them to a page. But a page needs a layout.
@@ -123,7 +132,7 @@ NOTE: Please note, we are trying to improve this part to use our other module ca
 
 ##The Page Structure
 
-You page will also need a page structure, this page structure could be reuse by multiple pages.
+Your page will also need a page structure, this page structure could be reused by multiple pages.
 
 Here is an example of a Page Structure:
 
@@ -173,7 +182,6 @@ Here is an example:
 ```
 
 As you can see, the page is defined by a name (title of the Page), a route (the URL in your adress bar), the layout (he needs to use) and a list of components. Each component needs to have the name of the placeholder you want to insert itself and a data object. This data will be used by the component.
-
 
 ##Put it all together
 
