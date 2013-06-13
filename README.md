@@ -3,6 +3,8 @@ cosyJS
 
 Full stack UI component library and layout generator
 
+[![Build Status](https://travis-ci.org/dervalp/cosyJS.png?branch=master)](https://travis-ci.org/dervalp/cosyJS)
+
 ## Intro
 
 **cosyJS is still experimental and should not be used for production environment**
