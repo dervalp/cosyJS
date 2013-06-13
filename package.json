@@ -14,12 +14,16 @@
     "rivets": "*"
   },
   "devDependencies": {
+    "mocha": "*",
     "grunt": "*",
     "grunt-contrib-less": "~0.5.1",
     "should": "*",
     "blanket": "~1.1.5"
   },
-  "scripts": { "test": "mocha --recursive", "blanket": { "pattern": "/test" } },
+  "scripts": { 
+    "test": "mocha --recursive", 
+    "blanket": { "pattern": "/test" }
+  },
   "repository": "git://github.com/dervalp/cosyJS",
   "main": "index",
   "engines": {
