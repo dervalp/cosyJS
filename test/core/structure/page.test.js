@@ -1,9 +1,10 @@
 var should = require("should"),
     _c = require("../../../clientLib/cosy"),
-    conf = require("../../../conf"),
-    tmplEngine = require("../../../core/template/helper"),
-    componentBuilder = require("../../../core/structure/componentBuilder")(conf);
-    Page = require("../../../core/structure/pageBuilder");
+    tmplEngine = require("../../../lib/core/template/helper")(),
+    componentBuilder = require("../../../lib/core/structure/componentBuilder"),
+    layoutBuilder     = require("../../../lib/core/structure/layoutBuilder"),
+    gridFactory = require('../../../lib/core/factory/grid'),
+    Page = require("../../../lib/core/structure/pageBuilder");
 
 var EMPTYGRID = { prefixClass: "", extraClass: "", classForRow: "" };
 
@@ -56,24 +57,28 @@ var basicComponents = [
 var components = ["text", "image"];
 
 describe('Given a pageBuilder', function() {
-  
-  before(function(done){
-    componentBuilder.build(components, _c, function(_c) {
-      done();
-    });
-  });
+  var layout;
 
   describe('with no grid and no component', function() {
-      it('it should render a basic html structure', function(done) {
-          var page = new Page();
+      before(function(done){
+        layoutBuilder.build(function(layoutconfiguration) {
+          layout = layoutconfiguration["base.master"];
+          done();
+        });
+      });
 
-          page.build(function(html) {
+      it('it should render a basic html structure', function(done) {
+          var gridInstance = gridFactory.create();
+          
+          var page = new Page({}, gridInstance, layout);
+
+          page.render(function(html) {
               html.should.equal("<!DOCTYPE html><html><head><title></title></head><body><div class='cosy-root 12'></div></body></html>");
               done();
           });
       });
   });
-  describe('with empty grid and no component', function() {
+  /*describe('with empty grid and no component', function() {
       it('it should render a basic html structure', function(done) {
           var page = new Page({ grid: EMPTYGRID });
 
@@ -105,5 +110,5 @@ describe('Given a pageBuilder', function() {
           });
           
       });
-  });
+  });*/
 });

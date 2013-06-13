@@ -55,7 +55,7 @@ describe('Given a gridBuilder', function() {
 
             it('create method should return header main footer with appropriate parameter', function(){
                 var html = grid.create(basicStructure);
-                html.should.equal("<div id='cosy-root' class='row'><%=root%><div  class='span12 header'><%=header%></div><div id='cosy-content' class='row'><%=content%></div></div>");
+                html.should.equal("<div id='root' class='row'><%=root%><div id='header' class='span12 header'><%=header%></div><div id='content' class='row'><%=content%></div></div>");
             });
         });
     });
