@@ -1,32 +1,31 @@
 var cosy = require("../lib/cosy"),
-    should = require("should");
+    should = require("should"),
+    fakeExpress = {
+        get: function () {}
+    };
 
-var fakeExpress = {
-    get: function() {}
-};
-
-describe('Given Cosy', function() {
-    it('should be defined', function() {
+describe("Given Cosy", function () {
+    it("should be defined", function () {
         cosy.should.exists;
     });
-    describe('and a fake express instance', function() {
-        it('should be defined', function() {          
+    describe("and a fake express instance", function () {
+        it("should be defined", function () {
             var cosyApp = cosy(fakeExpress);
         });
     });
-    describe('and a fake express instance', function() {
+    describe("and a fake express instance", function () {
         var cosyApp = cosy(fakeExpress);
 
-        it('should have a start function', function() {          
+        it("should have a start function", function () {
             cosyApp.start.should.exists;
         });
-        it('should have a configuration file', function() {          
+        it("should have a configuration file", function () {
             cosyApp.configuration.should.exists;
         });
-        it('should start server when calling start', function(done) {          
-            cosyApp.start(function() {
+        it("should start server when calling start", function (done) {
+            cosyApp.start(function () {
                 done();
             });
         });
-    });     
+    });
 });

@@ -14,15 +14,25 @@
     "rivets": "*"
   },
   "devDependencies": {
-    "mocha": "*",
+    "mocha": "~1.11.0",
     "grunt": "*",
     "grunt-contrib-less": "~0.5.1",
     "should": "*",
-    "blanket": "~1.1.5"
+    "blanket": "~1.1.5",
+    "travis-cov": "~0.2.4",
+    "grunt-contrib-jshint": "~0.6.0"
   },
-  "scripts": { 
-    "test": "mocha --recursive", 
-    "blanket": { "pattern": "/test" }
+  "scripts": {
+    "travis-cov": {
+      "threshold": 70
+    },
+    "blanket": {
+      "pattern": [
+        "lib/core/",
+        "lib/utils/"
+      ]
+    },
+    "test": "mocha --recursive --require blanket -R travis-cov"
   },
   "repository": "git://github.com/dervalp/cosyJS",
   "main": "index",
