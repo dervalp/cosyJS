@@ -8,6 +8,23 @@ module.exports = function (grunt) {
         }
       }
     },
+    watch: {
+      scripts: {
+        files: ["**/*.js"],
+        tasks: ["jshint", "shell"],
+        options: {
+          livereload: true
+        },
+      },
+    },
+    shell: {
+      test: {
+        command: "npm test",
+        options: {
+          async: false
+        }
+      }
+    },
     jshint: {
       all: ["Gruntfile.js", "lib/**/*.js", "test/**/*.js"],
       options: {
@@ -34,7 +51,10 @@ module.exports = function (grunt) {
 
   grunt.loadNpmTasks("grunt-contrib-less");
   grunt.loadNpmTasks("grunt-contrib-jshint");
+  grunt.loadNpmTasks("grunt-contrib-watch");
+  grunt.loadNpmTasks("grunt-shell-spawn");
 
-  grunt.registerTask("default", ["jshint"]);
+  grunt.registerTask("default", ["jshint", "shell"]);
+  grunt.registerTask("dev", ["watch"]);
 
 };
