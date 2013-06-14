@@ -5,9 +5,9 @@ html
     link(href="/stylesheets/style.css", rel="stylesheet")
   body
     div.container
-        |<%=content%>
+        |{{{content}}}
     script
-        window.__c_conf = <%= conf %>;
-        window.__c_scripts = <%= scripts %>;
+        window.__c_conf = {{{conf}}};
+        window.__c_scripts = {{{scripts}}};
     script(src="http://code.jquery.com/jquery-2.0.0.js")
     script(src="/cosy/c.js")
