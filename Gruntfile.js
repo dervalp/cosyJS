@@ -42,7 +42,6 @@ module.exports = function (grunt) {
         strict: false,
         eqnull: true,
         node: true,
-        maxcomplexity: 6,
         browser: true,
         expr: "warn"
       }
