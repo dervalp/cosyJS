@@ -26,12 +26,12 @@
   },
   "scripts": {
     "travis-cov": {
-      "threshold": 70
+      "threshold": 60
     },
     "blanket": {
       "pattern": [
-        "lib/core/",
-        "lib/utils/"
+          "lib/core/",
+          "lib/utils/"
       ]
     },
     "test": "mocha --recursive --require blanket -R travis-cov"
