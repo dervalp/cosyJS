@@ -26,4 +26,10 @@ describe("Given a Parsing Utils", function () {
 
         type.should.eql("");
     });
+    it("extract Place holder", function () {
+        var test = "<div class='fefefe'>bla allala <p>{{#placeholder toto}}{{/placeholder}}</p>{{#placeholder titit}}{{/placeholder}}</div>",
+            placeholders = parsingHelper.extractPlaceholders(test);
+
+        placeholders.length.should.eql(2);
+    });
 });
