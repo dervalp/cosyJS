@@ -8,13 +8,11 @@ describe("Given a middlewareBuilder", function () {
 	});
 
 	it("should take middleare", function (done) {
-		console.log("!!! PATH !!!")
 		var testMidlePath = path.normalize(__dirname + "/../../data/");
-		console.log(testMidlePath)
 
 		middlewareBuilder.build(testMidlePath, function (middleware) {
-			Object.keys(middleware).length.should.eql(1)
-			done()
+			Object.keys(middleware).length.should.eql(1);
+			done();
 		});
 	});
 });
