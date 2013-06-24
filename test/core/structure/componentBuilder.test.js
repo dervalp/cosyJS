@@ -24,8 +24,8 @@ describe("Given a componetBuilder", function () {
 
         it("load", function (done) {
             compBuilder.build(_c, function (_c, configuration) {
-                Object.keys(_c.components).length.should.eql(9);
-                configuration.length.should.eql(9);
+                Object.keys(_c.components).length.should.eql(10);
+                configuration.length.should.eql(10);
                 done();
             });
         });

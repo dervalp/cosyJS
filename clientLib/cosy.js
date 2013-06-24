@@ -37,6 +37,66 @@ if (!isBrowser) {
 
   _c.version = "0.0.1";
 
+  _c.tmplSystem = tmplSystem;
+
+  _c.async = _.async || {};
+
+  function only_once(fn) {
+    var called = false;
+    return function () {
+      if (called) throw new Error("Callback was already called.");
+      called = true;
+      fn.apply(root, arguments);
+    }
+  }
+
+  _c.async.each = function (arr, iterator, callback) {
+    callback = callback || function () {};
+    if (!arr.length) {
+      return callback();
+    }
+    var completed = 0;
+    _.each(arr, function (x) {
+      iterator(x, only_once(function (err) {
+        if (err) {
+          callback(err);
+          callback = function () {};
+        } else {
+          completed += 1;
+          if (completed >= arr.length) {
+            callback(null);
+          }
+        }
+      }));
+    });
+  };
+
+  var doParallel = function (fn) {
+    return function () {
+      var args = Array.prototype.slice.call(arguments);
+      return fn.apply(null, [_c.async.each].concat(args));
+    };
+  };
+
+  var _asyncMap = function (eachfn, arr, iterator, callback) {
+    var results = [];
+    arr = _.map(arr, function (x, i) {
+      return {
+        index: i,
+        value: x
+      };
+    });
+    eachfn(arr, function (x, callback) {
+      iterator(x.value, function (err, v) {
+        results[x.index] = v;
+        callback(err);
+      });
+    }, function (err) {
+      callback(err, results);
+    });
+  };
+
+  _c.async.map = doParallel(_asyncMap);
 
   _c.templates = {};
 
@@ -47,7 +107,7 @@ if (!isBrowser) {
       get: function (path, isInstance, cb) {
         var template = cache[path];
         if (!template) {
-          Backbone.$.get("template/" + path, function (data) {
+          Backbone.$.get("/cosy/template/" + path, function (data) {
             var compiled = tmplSystem.compile(data);
             cache[path] = compiled;
 
@@ -96,7 +156,9 @@ if (!isBrowser) {
           callback.wrapped = function (m, v) {
             callback(v)
           };
-          obj.on('change:' + keypath, callback.wrapped);
+          if (keypath) {
+            obj.on('change:' + keypath, callback.wrapped);
+          }
         },
         unsubscribe: function (obj, keypath, callback) {
           obj.off('change:' + keypath, callback.wrapped);
@@ -132,6 +194,7 @@ if (!isBrowser) {
    * Static Definitions
    */
   var ComponentModel = _c.Model = Backbone.Model;
+
   var ComponentView = _c.View = Backbone.View.extend({
     initialize: function (options) {
       this.template = options.template || undefined;
@@ -148,10 +211,14 @@ if (!isBrowser) {
         var html = tmpl(self.model.toJSON());
         if (isBrowser) {
           self.$el.html(html);
-          self.bindings.unbind();
-          self.bindings.build();
-          self.bindings.bind();
-          self.bindings.sync();
+          if (self.model.attributes) {
+            if (!self.disabledBinding) {
+              self.bindings.unbind();
+              self.bindings.build();
+              self.bindings.bind();
+              self.bindings.sync();
+            }
+          }
           if (cb) {
             cb(html);
           }
@@ -168,10 +235,12 @@ if (!isBrowser) {
       initialize: function (options) {
         this.template = options.template;
         this.module = options.module;
-        this.bindings = rivets.bind(this.$el, {
-          model: this.model,
-          view: this
-        });
+        if (!this.disabledBinding) {
+          this.bindings = rivets.bind(this.$el, {
+            model: this.model,
+            view: this
+          });
+        }
         this._cInit();
       },
       _cInit: function () {}
@@ -349,15 +418,22 @@ if (!isBrowser) {
   var scriptLoadError = function () {
     console.log(arguments);
   };
+
   var buildModRequest = function (modulesElem) {
     var allScript = modulesElem,
-      request = "/load/comp?mod=[",
+      request = "/cosy/load/comp?mod=[",
       end = "]",
       mod = [];
 
     _.each(allScript, function (comp) {
-      var type = comp["type"];
+      var type = comp["type"],
+        subComp = comp["component"];
+
       mod.push(type);
+
+      if (subComp) {
+        mod.push(subComp);
+      }
     });
 
     return request + mod.join(",") + end;
@@ -401,6 +477,7 @@ if (!isBrowser) {
       control.id = uniqueId;
       control.type = type;
       control.key = id;
+      control.load = load;
     });
 
     console.log("parsing Dom is done");
@@ -409,14 +486,14 @@ if (!isBrowser) {
     return dfd.promise();
   };
 
-  var buildInitialValues = function (id, config) {
+  var getInitialValue = function (id, config) {
     var control = _.find(config, function (conf) {
       return conf.id === id;
     });
     if (control) {
-      return control.data;
+      return control;
     }
-    return {};
+    return undefined;
   };
 
   var parseApp = function (controls) {
@@ -424,8 +501,23 @@ if (!isBrowser) {
       ids = _.keys(controls);
 
     _.each(ids, function (id) {
-      exposedComponent(controls[id], buildInitialValues(id, _c.config), mainModule);
+      //we loop through the controls and check if has subComp if has
+      //we need to pick the key and after loop for each item and give 
+      //date to the appropriate subcomp
+      var values = getInitialValue(id, _c.config);
+      if (values && id.indexOf("subComp") === -1) {
+        var model = exposedComponent(controls[id], values, mainModule);
+        if (values.component) {
+          _.each(values[values.component + "s"], function (subcomp) {
+            var control = controls[subcomp.id];
+            exposedComponent(control, subcomp, mainModule);
+          });
+        }
+      }
     });
+
+    mainModule.all = getInitialValue("__all", _c.config);
+
     return _c.trigger("cosy-loaded", mainModule);
   };
 
@@ -488,7 +580,7 @@ if (!isBrowser) {
       collection: collection
     });
     module.add(control.key, model, collection);
-
+    return model;
   };
 
   _.extend(_c, Backbone.Events);
