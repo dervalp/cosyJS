@@ -35,6 +35,8 @@ if (!isBrowser) {
     window._c = _c;
   }
 
+  _c.isBrowser = isBrowser;
+
   _c.version = "0.0.1";
 
   _c.tmplSystem = tmplSystem;
@@ -199,7 +201,9 @@ if (!isBrowser) {
     initialize: function (options) {
       this.template = options.template || undefined;
       this.module = options.module;
+      this._cInit();
     },
+    _cInit: function () {},
     render: function (cb) {
       var self = this,
         template = this.template || this.model.get("type") || undefined;
@@ -242,8 +246,7 @@ if (!isBrowser) {
           });
         }
         this._cInit();
-      },
-      _cInit: function () {}
+      }
     });
   }
 

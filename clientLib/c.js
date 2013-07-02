@@ -96,9 +96,11 @@
 
         if (isBrowser) {
           window._c = _c;
+          window._ = _;
         }
 
         _c.version = "0.0.1";
+        _c.isBrowser = isBrowser;
 
         _c.async = _.async || {};
 
@@ -259,6 +261,8 @@
          */
         var ComponentModel = _c.Model = Backbone.Model;
 
+        _c.Collection = Backbone.Collection;
+
         var ComponentView = _c.View = Backbone.View.extend({
           initialize: function (options) {
             this.template = options.template || undefined;
@@ -303,9 +307,10 @@
                   module: this.module
                 });
               }
-              this._cInit();
-            },
-            _cInit: function () {}
+              if (this._cInit) {
+                this._cInit();
+              }
+            }
           });
         }
 
@@ -412,9 +417,10 @@
 
           var extendModel = _.extend(extendModel, {
             initialize: function () {
-              this._cInit();
-            },
-            _cInit: cInit
+              if (this._cInit) {
+                this._cInit();
+              }
+            }
           });
 
           model = baseModel.extend(extendModel);
@@ -569,7 +575,7 @@
             if (values && id.indexOf("subComp") === -1) {
               var model = exposedComponent(controls[id], values, mainModule);
               if (values.component) {
-                _.each(values[values.component + "s"], function (subcomp) {
+                _.each(values[values.key], function (subcomp) {
                   var control = controls[subcomp.id];
                   exposedComponent(control, subcomp, mainModule);
                 });
