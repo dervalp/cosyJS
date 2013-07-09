@@ -1,0 +1,29 @@
+{
+  "name": "about",
+  "subdomain": "www",
+  "route": "/about",
+  "layout": "market",
+  "middlewares": [
+      "config",
+      "scope"
+  ],
+  "structure": "marketing",
+  "components": [{
+      "type": "extend",
+      "name": "main"
+    }, {
+      "type": "about",
+      "id": "about",
+      "dynamic": false,
+      "placeholder": "contentMain"
+    }, {
+      "type": "staticMenu",
+      "id": "staticMenu",
+      "dynamic": false,
+      "placeholder": "contentSidebar",
+      "data": {
+        "selected": "about"
+      }
+    }
+  ]
+}

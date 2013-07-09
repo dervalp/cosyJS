@@ -164,6 +164,18 @@
 
         _c.templates = {};
 
+        var extractComp = function (str) {
+          var componentRegex = new RegExp(/\{\{component(.*?)\}\}/g),
+            matches,
+            result = [];
+
+          while (matches = componentRegex.exec(str)) {
+            result.push(matches[1].replace(/^\s+|\s+$/g, ""));
+          }
+
+          return result;
+        };
+
         var templateEngine = function () {
           var cache = {};
 
@@ -171,7 +183,7 @@
             get: function (path, isInstance, cb) {
               var template = cache[path];
               if (!template) {
-                Backbone.$.get("cosy/template/" + path, function (data) {
+                Backbone.$.get("/cosy/template/" + path, function (data) {
                   var compiled = tmplSystem.compile(data);
                   cache[path] = compiled;
 
@@ -268,30 +280,78 @@
             this.template = options.template || undefined;
             this.module = options.module;
           },
-          render: function (cb) {
-            var self = this,
+          render: function (callback) {
+            var html,
+              self = this,
+              data = self.model.toJSON(),
               template = this.template || this.model.get("type") || undefined;
 
-            _c.templateEngine.get(template, this.model.get("isInstance"), function (tmpl) {
-              var html = tmpl(self.model.toJSON());
-              if (isBrowser) {
-                self.$el.html(html);
-                if (self.model.attributes) {
-                  if (!self.disabledBinding) {
-                    self.bindings.unbind();
-                    self.bindings.build();
-                    self.bindings.bind();
-                    self.bindings.sync();
+            _c.templateEngine.get(template, this.model.get("isInstance"), function (tmplString) {
+
+              var nestedComp = extractComp(tmplString),
+                result = {};
+
+              var render = function (tmplString, extend) {
+                var compiled = tmplSystem.compile(tmplString);
+
+                if (self.model.get("hasPlaceholder")) {
+                  return callback(compiled);
+                }
+
+                if (extend) {
+                  data = _.extend(data, extend);
+                }
+
+                html = compiled(data);
+
+                if (isBrowser) {
+                  self.$el.html(html);
+                  if (self.model.attributes) {
+                    if (!self.disabledBinding) {
+                      self.bindings.unbind();
+                      self.bindings.build();
+                      self.bindings.bind();
+                      self.bindings.sync();
+                    }
                   }
+                  if (callback) {
+                    callback(self.$el.html());
+                  }
+                } else {
+                  return callback(html);
                 }
-                if (cb) {
-                  cb(html);
-                }
+              };
+
+              if (!nestedComp) {
+                render(tmplString);
               } else {
-                return cb(html);
+                var changeTemplate = tmplString;
+
+                _.async.each(nestedComp, function (subComp, cb) {
+                  var id = _.uniqueId("nested_"),
+                    regex = new RegExp("\{\{component " + subComp + "\}\}", "g");
+
+                  var component = {
+                    type: subComp,
+                    isInstance: true,
+                    id: id
+                  };
+
+                  component = exposedComponent(data, component);
+
+
+                  changeTemplate = changeTemplate.replace(regex, "{{" + id + "}}");
+
+                  component.view.render(function (partialml) {
+                    result[id] = partialml;
+                    cb(partialml);
+                  });
+                }, function () {
+                  render(changeTemplate, result);
+                });
               }
+              return self;
             });
-            return self;
           }
         });
 

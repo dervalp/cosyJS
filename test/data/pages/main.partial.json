@@ -1,0 +1,7 @@
+[{
+		"type": "globalHeader",
+		"id": "globalHeader",
+		"dynamic": false,
+		"placeholder": "globalHeaderContent"
+	}
+]

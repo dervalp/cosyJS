@@ -1,19 +1,19 @@
 cosyJS
 ======
 
-Full stack UI component library and layout generator
+Lightweight express.js UI server
 
 [![Build Status](https://travis-ci.org/dervalp/cosyJS.png?branch=master)](https://travis-ci.org/dervalp/cosyJS)
 
 ## Intro
 
-**cosyJS is still experimental and should not be used for production environment**
+**You can use cosyJS at your own risk. The API is subject to changes**
 
 The idea is to provide you out of the box a node.js server (express currently) which manage all your static files (stylesheets, javascript templates, javascript lib,...).
 
 cosyJS has also some nice features out of the box like:
 
-* A layout generator using Bootstrap (and later Foundation and Cosy Grid Stystem)
+* A layout generator using Bootstrap and Foundation (version 4).
 * A powerfull client-side library which allows you to play easily with your HTML and/or the cosyJS components. 
 * A library of full-stack components which has a set of UI element you use all the time (text, button, image).
 
@@ -22,8 +22,6 @@ cosyJS has also some nice features out of the box like:
 You can find an implementation of a the well know [Todo app](https://github.com/dervalp/cosyJS-todo) using cosyJS and [their implementation](http://cosytodo.herokuapp.com/).
 
 ## Try it and give feedbacks
-
-This is published mainly to give the possibility to try cosy and give me feedbacks. Please, do not use this in a production environment.
 
 ```javascript
 npm install cosy
@@ -61,7 +59,7 @@ Right now Cosy required an express instance in order to work, here is the code t
 
 By using node.js we are able to run the same code client and server side. Cosy tries to take this to its advantage and allows you to share lots of code between them.
 
-A component needs 1 things in order to work, a javascript definition or a template.
+A component needs 1 thing in order to work, a javascript definition or a template.
 
 **The definition**
 
@@ -108,7 +106,7 @@ This code will register this template (without having a javascript file). The ty
 When you have some components, you now need to add them to a page. But a page needs a layout.
 The layout is mainly used to define some custom stylesheets, some script (GA),...
 
-Layout uses the JADE notation.
+Layout uses the plain old HTML or JADE notation.
 
 Here is a really simple layout:
 
@@ -121,16 +119,14 @@ doctype 5
 	    link(href="/stylesheets/style.css", rel="stylesheet")
 	  body
 	    div.container
-	        |<%=content%>
+	        {{{content}}}
 	    script
-	        window.__c_conf = <%= conf %>;
+	        window.__c_conf = {{conf}};
 	    script(src="http://code.jquery.com/jquery-2.0.0.js")
 	    script(src="/javascripts/c.js")
 ```
 
-The required part of this layout is the 3 last lines.
-
-NOTE: Please note, we are trying to improve this part to use our other module called "Hygge" (a script file loader). More information will come.
+The 3 last lines are required (you can replace jquery by zepto if you whish).
 
 ##The Page Structure
 
@@ -191,10 +187,14 @@ What cosyJS does under the hood is to assembly all these static definitions to p
 
 ##Dealing with Data
 
-As you can see, there is nothing related to Data communcation, cosy lets you defined how and where you want to fetch your Data. The idea is to extend the APP object and to create a REST API using express. Hence, in your component, you will be able to fetch the data you want.
 
-TODO: We will try to find an easy way for you to work "out of the box" with a REST Api.
+**Controllers**
+If you want to bootstrap your components with some data, you can use a controller (more info later).
 
-##Conclusion
+**Middlewares**
+more info later
 
-As you can see, this is an ambitious project and currently you are just able to produced really basic website with it but we are working hard to enhance this and you are welcome to contribute to the project.
+**You API**
+
+Cosy lets you define how and where you want to fetch your Data. The idea is to extend the APP object and to create a REST API using express. Hence, in your component, you will be able to fetch the data you want.
+

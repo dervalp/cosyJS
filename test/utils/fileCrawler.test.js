@@ -13,7 +13,7 @@ var _c = function () {
     };
 }();
 
-describe("Given a componetBuilder", function () {
+describe("Given a fileCrawler", function () {
     it("should be defined", function () {
         fileCrawler.should.exists;
     });
@@ -27,7 +27,7 @@ describe("Given a componetBuilder", function () {
         var structureBuilder = fileCrawler(STRUCTURE_PATH);
 
         it("load", function (done) {
-            structureBuilder.build(function (configuration) {
+            structureBuilder.build(structureBuilder.parseJson, function (configuration) {
                 configuration.length.should.eql(1);
                 done();
             });

@@ -1,24 +1,100 @@
 _c.component({
     type: "repeater",
-    initialize: function() {
-        this.model.on("change", this.afterRender, this);
+    disabledBinding: true,
+    repeater: "<div cosy-type='repeater' cosy-id='{{id}}'>{{{content}}}</div>",
+    extendModel: {
+        add: function (collection) {
+            if (collection.models) {
+                this.trigger("add-collection", collection);
+            } else {
+                this.trigger("add-model", collection);
+            }
+        }
     },
-    add: function(model) {
-        var view = new _c.View({ model: model });
+    initialize: function () {
+        this.model.on("add-collection", this.addCollection, this);
+        this.model.on("add-model", this.addModel, this)
+        this.model.on("change:" + this.model.get("key"), this.addId, this);
+    },
+    addId: function () {
+        _.each(this.model.get("items"), function (item) {
+            var generatedID = _.uniqueId("subcomp_");
+            item.id = generatedID;
+        });
+    },
+    addModel: function (model) {
+        if (!this.collection) {
+            this.collection = new _c.Collection();
+            this.collection.on("add", this.renderItem, this);
+        }
+        model.id = _.uniqueId("subcomp_");
+        this.collection.add(model);
+    },
+    renderItem: function (item) {
+        var componentType = this.model.get("component"),
+            Komp = _c.components[componentType],
+            result = {};
+
+        result[this.model.get("component")] = item.toJSON();
+
+        var model = new Komp.model(result);
+
+        model.set("isInstance", true);
+        model.set("all", this.model.get("all"));
+
+        var view = new Komp.view({
+            template: this.model.get("component"),
+            model: model,
+            module: this.module
+        });
+
         this.$el.append(view.render().$el);
     },
-    afterRender: function() {
+    renderItems: function (item) {
+        this.renderItem(item.toJSON());
+    },
+    addCollection: function (collection) {
+        this.collection = collection;
+
+        this.collection.on("add", this.renderItems, this);
+    },
+    render: function (callback) {
+        this.components = [];
+        var key = this.model.get("key"),
+            componentType = this.model.get("component"),
+            Komp = _c.components[componentType];
+
         var self = this;
-        var collection = this.model.get("collection");
-        collection.fetch({
-            success : function(collections) {
-                collections.each(function(model) {
-                    console.log(model);
-                    var view = new _c.View({ model: model });
-                    self.$el.append(view.render().$el);
-                });
-                collection.on("add", self.add, self);
-            }
+
+        _.each(this.model.get(this.model.get("key")), function (item) {
+            item[key.substring(0, key.length - 1)] = item;
+
+            var model = new Komp.model(item);
+            model.set("isInstance", true);
+            model.set("all", this.model.get("all"));
+            var view = new Komp.view({
+                template: this.model.get("component"),
+                model: model
+            });
+
+            this.components.push({
+                model: model,
+                view: view
+            });
+        }, this);
+
+        var renderComp = function (comp, callback) {
+            comp.view.render(function (html) {
+                callback(null, html);
+            });
+        };
+
+        _c.async.map(this.components, renderComp, function (err, result) {
+            var repeater = _c.tmplSystem.compile(self.repeater);
+            callback(repeater({
+                id: self.model.get("id"),
+                content: result.join("")
+            }));
         });
     }
 });

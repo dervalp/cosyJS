@@ -1,33 +1,33 @@
 var componentBuilder = require("../../../lib/core/structure/componentBuilder"),
-    should = require("should");
+	should = require("should");
 
 var _c = function () {
-    var comp = {};
+	var comp = {};
 
-    return {
-        component: function (obj) {
-            comp[obj.type] = obj;
-        },
-        components: comp
-    };
+	return {
+		component: function (obj) {
+			comp[obj.type] = obj;
+		},
+		components: comp
+	};
 }();
 
 describe("Given a componetBuilder", function () {
-    it("should be defined", function () {
-        componentBuilder.should.exists;
-    });
-    it("should have a build method", function () {
-        componentBuilder.build.should.exists;
-    });
-    describe("with a existing Path", function () {
-        var compBuilder = componentBuilder;
+	it("should be defined", function () {
+		componentBuilder.should.exists;
+	});
+	it("should have a build method", function () {
+		componentBuilder.build.should.exists;
+	});
+	describe("with a existing Path", function () {
+		var compBuilder = componentBuilder;
 
-        it("load", function (done) {
-            compBuilder.build(_c, function (_c, configuration) {
-                Object.keys(_c.components).length.should.eql(10);
-                configuration.length.should.eql(10);
-                done();
-            });
-        });
-    });
+		it("load", function (done) {
+			compBuilder.build(_c, function (_c, configuration) {
+				Object.keys(_c.components).length.should.eql(11);
+				configuration.length.should.eql(11);
+				done();
+			});
+		});
+	});
 });

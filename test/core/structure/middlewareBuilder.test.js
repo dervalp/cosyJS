@@ -8,7 +8,7 @@ describe("Given a middlewareBuilder", function () {
 	});
 
 	it("should take middleare", function (done) {
-		var testMidlePath = path.normalize(__dirname + "/../../data/");
+		var testMidlePath = path.normalize(__dirname + "/../../data/middlewares/");
 
 		middlewareBuilder.build(testMidlePath, function (middleware) {
 			Object.keys(middleware).length.should.eql(1);

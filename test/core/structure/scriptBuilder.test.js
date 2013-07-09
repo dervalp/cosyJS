@@ -12,8 +12,6 @@ describe("Given a ScriptBuilder", function () {
                 name: "button"
             }
         ], {}, function (result) {
-            console.log(result);
-
             done();
         });
     });
