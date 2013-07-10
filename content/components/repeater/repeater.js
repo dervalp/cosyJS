@@ -62,16 +62,24 @@ _c.component({
         this.components = [];
         var key = this.model.get("key"),
             componentType = this.model.get("component"),
+            toClient = [],
+            singularKey = key.substring(0, key.length - 1),
             Komp = _c.components[componentType];
 
         var self = this;
 
+        if (this.model.get("dynamic")) {
+            toClient.push(_.omit(this.model.toJSON(), [this.model.get("key")]));
+        }
+
         _.each(this.model.get(this.model.get("key")), function (item) {
-            item[key.substring(0, key.length - 1)] = item;
+
+            item[singularKey] = item;
 
             var model = new Komp.model(item);
             model.set("isInstance", true);
             model.set("all", this.model.get("all"));
+
             var view = new Komp.view({
                 template: this.model.get("component"),
                 model: model
@@ -84,17 +92,35 @@ _c.component({
         }, this);
 
         var renderComp = function (comp, callback) {
-            comp.view.render(function (html) {
+            comp.view.render(function (html, json) {
+
+                console.log(singularKey);
+                console.log("!!! KEY")
+                var toC = [];
+                _.each(json, function (j) {
+                    toC.push(_.omit(j, [singularKey]))
+                });
+
+                console.log(toC);
+
+                toClient = toClient.concat(toC);
+
+                //throw "ofkeofkeofk"
+
                 callback(null, html);
             });
         };
 
         _c.async.map(this.components, renderComp, function (err, result) {
             var repeater = _c.tmplSystem.compile(self.repeater);
-            callback(repeater({
+            var content = repeater({
                 id: self.model.get("id"),
                 content: result.join("")
-            }));
+            });
+
+            console.log("!!!TO CLIENT !!!")
+            console.log(toClient)
+            callback(content, toClient);
         });
     }
 });

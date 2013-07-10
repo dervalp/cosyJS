@@ -10,7 +10,7 @@ module.exports = function (grunt) {
     },
     watch: {
       scripts: {
-        files: ["**/*.js"],
+        files: ["/lib/**/*.js", "/clientLib/**/*.js"],
         tasks: ["jshint", "shell"],
         options: {
           livereload: true
@@ -40,6 +40,7 @@ module.exports = function (grunt) {
         undef: false,
         boss: true,
         strict: false,
+        unused:true,
         eqnull: true,
         node: true,
         browser: true,

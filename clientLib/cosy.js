@@ -1,37 +1,34 @@
 var Backbone = require("backbone"),
     rivets = require("rivets"),
     tmplSystem = require("handlebars"),
-    _ = require("../lib/utils/async");
-
-tmplSystem.registerHelper("placeholder", function (content) {
-    if (!content) {
-        return "";
-    }
-
-    return new tmplSystem.SafeString(content);
-});
-
-var isBrowser = typeof window !== 'undefined';
-if (!isBrowser) {
-    Backbone.$ = function () {
-        return {
-            attr: function () {},
-            off: function () {},
-            on: function () {}
-        }
-    };
-
-    Backbone.$.get = function () {};
-}
+    _ = require("underscore");
 
 (function () {
     "use strict";
 
-    var __domain = "http://localhost:3000";
-
     var root = this,
         _cosy = this._c,
-        _c;
+        _c,
+        modules = {};
+
+    tmplSystem.registerHelper("placeholder", function (content) {
+        if (!content) { return ""; }
+        return new tmplSystem.SafeString(content);
+    });
+
+    var isBrowser = typeof window !== 'undefined';
+
+    if (!isBrowser) {
+        Backbone.$ = function () {
+            return {
+                attr: function () {},
+                off: function () {},
+                on: function () {}
+            }
+        };
+
+        Backbone.$.get = function () {};
+    }
 
     if (typeof exports !== 'undefined') {
         _c = exports;
@@ -39,13 +36,11 @@ if (!isBrowser) {
         _c = root._c = {};
     }
 
-    if (isBrowser) {
-        window._c = _c;
-    }
+    if (isBrowser) window._c = _c;
 
     _c.isBrowser = isBrowser;
 
-    _c.version = "0.0.1";
+    _c.VERSION = "0.1.0";
 
     _c.tmplSystem = tmplSystem;
 
@@ -108,46 +103,41 @@ if (!isBrowser) {
 
     _c.async.map = doParallel(_asyncMap);
 
-    _c.templates = {};
-
     var extractComp = function (str) {
-        var componentRegex = new RegExp(/\{\{component(.*?)\}\}/g),
-            matches,
-            result = [];
+            var componentRegex = new RegExp(/\{\{component(.*?)\}\}/g),
+                matches,
+                result = [];
 
-        while (matches = componentRegex.exec(str)) {
-            result.push(matches[1].replace(/^\s+|\s+$/g, ""));
-        }
-
-        return result;
-    };
-
-    var templateEngine = function () {
-        var cache = {};
-
-        return {
-            get: function (path, isInstance, cb) {
-                var template = cache[path];
-                if (!template) {
-                    Backbone.$.get("/cosy/template/" + path, function (data) {
-                        cache[path] = data;
-
-                        return cb(data);
-                    });
-                } else {
-                    return cb(data);
-                }
+            while (matches = componentRegex.exec(str)) {
+                result.push(matches[1].replace(/^\s+|\s+$/g, ""));
             }
+
+            return result;
+        },
+        templateEngine = function () {
+            var cache = {};
+
+            return {
+                get: function (path, isInstance, cb) {
+                    var template = cache[path];
+                    if (!template) {
+                        Backbone.$.get("/cosy/template/" + path, function (data) {
+                            cache[path] = data;
+
+                            return cb(data);
+                        });
+                    } else {
+                        return cb(data);
+                    }
+                }
+            };
         };
-    };
 
     _c.templateEngine = templateEngine();
 
     _c.setEngine = function (tmplEngine) {
         _c.templateEngine = tmplEngine;
     };
-
-    var modules = {};
 
     _c.define = function (name, content) {
         var module;
@@ -218,6 +208,7 @@ if (!isBrowser) {
 
     var ComponentView = _c.View = Backbone.View.extend({
         initialize: function (options) {
+            options = options || {};
             this.template = options.template || undefined;
             this.module = options.module;
             this._cInit();
@@ -230,7 +221,9 @@ if (!isBrowser) {
 
             var template = this.template || this.model.get("type") || undefined;
 
-            toClient.push(self.model.toJSON());
+            if( this.model.get("dynamic") ) {
+                toClient.push(self.model.toJSON());
+            }
 
             var render = function (tmplContent, extend) {
                 var compiled = tmplSystem.compile(tmplContent);
@@ -269,7 +262,7 @@ if (!isBrowser) {
                 if (!nestedComp) {
                     render(tmplString);
                 } else {
-                    _.async.each(nestedComp, function (subComp, cb) {
+                    _c.async.each(nestedComp, function (subComp, cb) {
                         var id = _.uniqueId("nested_"),
                             regex = new RegExp("\{\{component " + subComp + "\}\}", "g"),
                             component = {
@@ -279,7 +272,7 @@ if (!isBrowser) {
                                 id: id
                             },
                             initialData = _.extend(self.model.toJSON(), component),
-                            inst = exposedComponent(component, initialData);
+                            inst = expose(component, initialData);
 
                         tmplString = tmplString.replace(regex, "{{" + id + "}}");
 
@@ -350,20 +343,12 @@ if (!isBrowser) {
         }
     });
 
-    /**
-     * Factories
-     */
-    var createApp = function (id) {
-        return new App({
-            id: id
-        });
+    var createApp = _c.app = function (id) {
+        return new App({ id: id });
     };
 
     var cInit = function () {
-
         var cAttrs = this._cAttrs;
-
-        /*here we should use JSON init object instead */
         _.each(cAttrs, function (attr) {
             if (attr["on"]) {
                 this.model.on("change:" + attr["name"], this[attr["on"]], this);
@@ -380,9 +365,7 @@ if (!isBrowser) {
     };
 
     var createComponent = function (name, model, view, collection) {
-        if (_c.components[name]) {
-            throw name + " component already existing";
-        }
+        if (_c.components[name]) throw name + " component already existing";
 
         _c.components[name] = {
             model: model,
@@ -391,8 +374,8 @@ if (!isBrowser) {
         };
     };
 
-    _c.app = createApp;
     _c.components = {};
+
     if (isBrowser) {
         _c.config = window.__c_conf || undefined;
     }
@@ -403,14 +386,13 @@ if (!isBrowser) {
 
         var componentName = obj.type,
             attrs = obj.attributes,
-            based = ["attributes", "name", "base", "plugin", "initialize", "listenTo", "extendModel"],
+            based = ["attributes", "name", "base", "plugin", "initialize", "extendModel"],
             functions = _.omit(obj, based),
             baseModel = ComponentModel,
             baseView = ComponentView,
             extendModel = obj.extendModel || {},
             initializeView = obj.initialize || emtpy,
             collection = obj.collection,
-            exposed,
             model,
             view;
 
@@ -432,29 +414,69 @@ if (!isBrowser) {
             _cInit: initializeView
         });
 
-        if (obj["listenTo"]) {
-            var listen = {},
-                parent = baseView.prototype.listen,
-                listenTo = obj["listenTo"],
-                listenKeys = _.keys(listenTo);
-
-            _.each(listenKeys, function (key) {
-                //build the listen
-                listen[key + ":$this"] = listenTo[key]
-            });
-            listen = _.extend(parent, listen);
-
-            ComponentModel = _.extend(ComponentModel, listen);
-        }
-
         createComponent(componentName, model, view, collection);
     };
 
-    /**
-     * Attaches a script to the DOM and executes it.
-     * @param {options} object, normally with .url
-     * @param {cb} callback, called when script is loaded
-     */
+    //control need the type, the id and the key.
+    var expose = _c.expose = function ( control, initValues, module ) {
+        var component = _c.components[control.type] || undefined,
+            hasPlaceholder = ( component.placeholders && component.placeholders.length > 0 ),
+            model,
+            collection,
+            view;
+
+        initValues.isInstance = component.isInstance;
+
+        if (hasPlaceholder) {
+            initValues = _.extend( initValues, {
+                placeholders: component.placeholders,
+                hasPlaceholder: true
+            });
+        }
+
+        if (component) {
+            if (component.model) {
+                model = new component.model(initValues);
+            } else {
+                model = new ComponentModel(initValues);
+            }
+
+            if (component.collection) {
+                collection = new component.collection();
+            } else {
+                collection = undefined;
+            }
+            view = new component.view({
+                model: model,
+                el: "." + control.id,
+                collection: collection,
+                module: module
+            });
+        } else {
+            model = new ComponentModel(initValues);
+            view = new ComponentView({
+                model: model,
+                el: "." + control.id,
+                module: module
+            });
+        }
+        _c.controls = _c.controls || [];
+        _c.controls.push({
+            id: control.key,
+            model: model,
+            view: view,
+            collection: collection
+        });
+
+        if (module) {
+            module.add(control.key, model, collection);
+        }
+        return {
+            model: model,
+            view: view
+        };
+    };
+
 
     function attachScript(options, cb) {
         var script = document.createElement("script");
@@ -479,7 +501,6 @@ if (!isBrowser) {
             script.onload = cb;
         });
     }
-
 
     var scriptLoadError = function () {
         console.log(arguments);
@@ -567,16 +588,13 @@ if (!isBrowser) {
             ids = _.keys(controls);
 
         _.each(ids, function (id) {
-            //we loop through the controls and check if has subComp if has
-            //we need to pick the key and after loop for each item and give 
-            //date to the appropriate subcomp
             var values = getInitialValue(id, _c.config);
             if (values && id.indexOf("subComp") === -1) {
-                var model = exposedComponent(controls[id], values, mainModule).model;
+                var model = expose(controls[id], values, mainModule).model;
                 if (values.component) {
                     _.each(values[values.key], function (subcomp) {
                         var control = controls[subcomp.id];
-                        exposedComponent(control, subcomp, mainModule);
+                        expose(control, subcomp, mainModule);
                     });
                 }
             }
@@ -603,66 +621,6 @@ if (!isBrowser) {
                 }
             });
         });
-    };
-
-    var exposedComponent = _c.exposedComponent = function (control, initValues, module) {
-        var component = _c.components[control.type] || undefined,
-            hasPlaceholder = (component.placeholders && component.placeholders.length > 0),
-            model,
-            collection,
-            view;
-
-        initValues.isInstance = component.isInstance;
-
-        if (hasPlaceholder) {
-            initValues = _.extend(initValues, {
-                placeholders: component.placeholders,
-                hasPlaceholder: true
-            });
-        }
-
-        if (component) {
-            if (component.model) {
-                model = new component.model(initValues);
-            } else {
-                model = new ComponentModel(initValues);
-            }
-
-            if (component.collection) {
-                collection = new component.collection();
-            } else {
-                collection = undefined;
-            }
-            view = new component.view({
-                model: model,
-                el: "." + control.id,
-                collection: collection,
-                module: module
-            });
-        } else {
-            //try to create based html
-            model = new ComponentModel(initValues);
-            view = new ComponentView({
-                model: model,
-                el: "." + control.id,
-                module: module
-            });
-        }
-        _c.controls = _c.controls || [];
-        _c.controls.push({
-            id: control.key,
-            model: model,
-            view: view,
-            collection: collection
-        });
-
-        if (module) {
-            module.add(control.key, model, collection);
-        }
-        return {
-            model: model,
-            view: view
-        };
     };
 
     _.extend(_c, Backbone.Events);
