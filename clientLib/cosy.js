@@ -3,6 +3,23 @@ var Backbone = require("backbone"),
     tmplSystem = require("handlebars"),
     _ = require("underscore");
 
+if(typeof window !== 'undefined') { window._ = _; }
+
+
+    tmplSystem.registerHelper("address", function (art, all) {
+        if (art.city) {
+            var url = "//" + art.city.shortName + "." + all.domain + "/";
+            return new tmplSystem.SafeString("<a href='" + url + "'><span>" + art.city.name + "</span></a>");
+        } else {
+            return new tmplSystem.SafeString("<span>" + art.address + "</span>");
+        }
+    });
+
+    tmplSystem.registerHelper("ranking", function (index) {
+        return index + 1;
+    });
+
+
 (function () {
     "use strict";
 
@@ -127,7 +144,7 @@ var Backbone = require("backbone"),
                             return cb(data);
                         });
                     } else {
-                        return cb(data);
+                        return cb(template);
                     }
                 }
             };
@@ -221,11 +238,20 @@ var Backbone = require("backbone"),
 
             var template = this.template || this.model.get("type") || undefined;
 
-            if( this.model.get("dynamic") ) {
-                toClient.push(self.model.toJSON());
+            if(isBrowser && this.bindings) {
+                this.bindings.unbind();
             }
 
             var render = function (tmplContent, extend) {
+
+                if( self.model.get("dynamic") ) {
+                    var data = self.model.toJSON();
+                    if(extend) {
+                        data.disabledBinding = true;
+                    }
+                    toClient.push(data);
+                }
+
                 var compiled = tmplSystem.compile(tmplContent);
 
                 extend = extend || {};
@@ -234,22 +260,24 @@ var Backbone = require("backbone"),
                     return callback(compiled, toClient);
                 }
 
-                html = compiled(_.extend(extend, self.model.toJSON()));
-
                 if (isBrowser) {
+                    html = compiled(self.model.toJSON());
                     self.$el.html(html);
-                    if (self.model.attributes) {
-                        if (!self.disabledBinding) {
-                            self.bindings.unbind();
+                    for(var ex in extend) {
+                        self.$el.find( "#" + ex ).html( extend[ex] );
+                    }
+                    //if (self.model.attributes) {
+                        if (!data.disabledBinding && !self.model.get( "disabledBinding" )) {
                             self.bindings.build();
                             self.bindings.bind();
                             self.bindings.sync();
                         }
-                    }
+                    //}
                     if (callback) {
                         callback(self.$el.html(), toClient);
                     }
                 } else {
+                    html = compiled(_.extend(extend, self.model.toJSON()));
                     return callback(html, toClient);
                 }
             };
@@ -259,34 +287,49 @@ var Backbone = require("backbone"),
                 var nestedComp = extractComp(tmplString),
                     result = {};
 
-                if (!nestedComp) {
+                if (nestedComp.length === 0) {
                     render(tmplString);
                 } else {
+
                     _c.async.each(nestedComp, function (subComp, cb) {
                         var id = _.uniqueId("nested_"),
-                            regex = new RegExp("\{\{component " + subComp + "\}\}", "g"),
+                            regex = new RegExp("\{\{\{component " + subComp + "\}\}\}", "g"),
                             component = {
                                 type: subComp,
                                 isInstance: true,
                                 dynamic: true,
                                 id: id
-                            },
-                            initialData = _.extend(self.model.toJSON(), component),
-                            inst = expose(component, initialData);
+                            };
+                            component.clientSide = isBrowser ? true : false;
 
-                        tmplString = tmplString.replace(regex, "{{" + id + "}}");
+                            var initialData = _.extend(self.model.toJSON(), component),
+                                inst = expose(component, initialData);
+
+                        if(isBrowser) {
+                            tmplString = tmplString.replace(regex, "<span id='" + id + "'></span>");
+                        } else {
+                            tmplString = tmplString.replace(regex, "{{{" + id + "}}}");
+                        }
+
+                        var el = inst.view.$el;
 
                         inst.view.render(function (partialml, clientSide) {
                             toClient = toClient.concat(clientSide);
-                            result[id] = partialml;
-                            cb(null, partialml);
+
+                            if(isBrowser) {
+                                result[id] = el;
+                                cb(null, el);
+                            } else {
+                                result[id] = partialml;
+                                cb(null, partialml);
+                            }
                         });
                     }, function (err, final) {
                         render(tmplString, result);
                     });
                 }
-                return self;
             });
+            return self;
         }
     });
 
@@ -295,16 +338,19 @@ var Backbone = require("backbone"),
             initialize: function (options) {
                 this.template = options.template;
                 this.module = options.module;
-                if (!this.disabledBinding) {
+                if ( !this.disabledBinding && !this.model.get( "disabledBinding" ) ) {
                     this.bindings = rivets.bind(this.$el, {
                         model: this.model,
-                        view: this
+                        view: this,
+                        module: this.module
                     });
                 }
                 this._cInit();
             }
         });
     }
+
+    _c.Collection = Backbone.Collection;
 
     var Components = Backbone.Collection.extend({
         model: ComponentModel
@@ -420,12 +466,13 @@ var Backbone = require("backbone"),
     //control need the type, the id and the key.
     var expose = _c.expose = function ( control, initValues, module ) {
         var component = _c.components[control.type] || undefined,
-            hasPlaceholder = ( component.placeholders && component.placeholders.length > 0 ),
+            hasPlaceholder = ( component && component.placeholders && component.placeholders.length > 0 ),
             model,
             collection,
+            el = control.clientSide ? undefined : "." + control.id,
             view;
 
-        initValues.isInstance = component.isInstance;
+        initValues.isInstance = ( component && component.isInstance );
 
         if (hasPlaceholder) {
             initValues = _.extend( initValues, {
@@ -448,7 +495,7 @@ var Backbone = require("backbone"),
             }
             view = new component.view({
                 model: model,
-                el: "." + control.id,
+                el: el,
                 collection: collection,
                 module: module
             });
@@ -456,10 +503,11 @@ var Backbone = require("backbone"),
             model = new ComponentModel(initValues);
             view = new ComponentView({
                 model: model,
-                el: "." + control.id,
+                el: el,
                 module: module
             });
         }
+
         _c.controls = _c.controls || [];
         _c.controls.push({
             id: control.key,
@@ -522,6 +570,8 @@ var Backbone = require("backbone"),
                 mod.push(subComp);
             }
         });
+        mod = _.uniq(mod);
+        mod = _.without(mod, ["__all"]);
 
         return request + mod.join(",") + end;
     };
@@ -589,15 +639,18 @@ var Backbone = require("backbone"),
 
         _.each(ids, function (id) {
             var values = getInitialValue(id, _c.config);
-            if (values && id.indexOf("subComp") === -1) {
+            if(values) {
                 var model = expose(controls[id], values, mainModule).model;
-                if (values.component) {
+            }
+            //if (values && id.indexOf("subComp") === -1 && id.indexOf("nested") === -1) {
+                
+              /*  if (values.component) {
                     _.each(values[values.key], function (subcomp) {
                         var control = controls[subcomp.id];
                         expose(control, subcomp, mainModule);
                     });
                 }
-            }
+            }*/
         });
 
         mainModule.all = getInitialValue("__all", _c.config);

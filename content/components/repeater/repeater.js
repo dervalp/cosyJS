@@ -31,15 +31,21 @@ _c.component({
         this.collection.add(model);
     },
     renderItem: function (item) {
+
         var componentType = this.model.get("component"),
             Komp = _c.components[componentType],
             result = {};
 
-        result[this.model.get("component")] = item.toJSON();
+        //result[this.model.get("component")] = item;
+        if(!Komp) {
+            Komp = { model: _c.Model, view: _c.View };
+        }
+        var initData = item.toJSON ? item.toJSON() : item;
 
-        var model = new Komp.model(result);
+        var model = new Komp.model(initData);
 
         model.set("isInstance", true);
+        model.set("dynamic", true);
         model.set("all", this.model.get("all"));
 
         var view = new Komp.view({
@@ -73,11 +79,14 @@ _c.component({
         }
 
         _.each(this.model.get(this.model.get("key")), function (item) {
-
+            item.id = _.uniqueId("subComp_");
             item[singularKey] = item;
 
             var model = new Komp.model(item);
+
+            model.set("type", componentType);
             model.set("isInstance", true);
+            model.set("dynamic", true);
             model.set("all", this.model.get("all"));
 
             var view = new Komp.view({
@@ -94,8 +103,6 @@ _c.component({
         var renderComp = function (comp, callback) {
             comp.view.render(function (html, json) {
 
-                console.log(singularKey);
-                console.log("!!! KEY")
                 var toC = [];
                 _.each(json, function (j) {
                     toC.push(_.omit(j, [singularKey]))
@@ -118,8 +125,6 @@ _c.component({
                 content: result.join("")
             });
 
-            console.log("!!!TO CLIENT !!!")
-            console.log(toClient)
             callback(content, toClient);
         });
     }
