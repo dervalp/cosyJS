@@ -1,5 +1,5 @@
 _c.component({
-    type: "input",
+    type: "textarea",
     keyup: function (evt) {
         if(evt.keyCode === 13) {
             var enter = this.$el.attr("cosy-enter");
